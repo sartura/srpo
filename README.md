@@ -41,11 +41,11 @@ The API consinst of the following elements:
   * `int srpo_uci_revert(const char *uci_config)`
   * `int srpo_uci_commit(const char *uci_config)`
 
-## `srpo_uci_error_e`
+## srpo_uci_error_e
 
 The enumeration represents error codes that can occure inside the library. Each error has its description assign to it.
 
-## `char *(*srpo_uci_transform_data_cb)(const char *value, void *private_data)`
+## char *(*srpo_uci_transform_data_cb)(const char *value, void *private_data)
 
 Function pointer used for functions that are used for transforimg data read, either from UCI or Sysrepo datastores, and before setting them to Sysrepo datastores or UCI.
 
