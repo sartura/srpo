@@ -42,7 +42,7 @@ typedef enum {
 #undef XM
 } srpo_uci_error_e;
 
-typedef char *(*srpo_uci_transform_data_cb)(const char *uci_value, void *private_data);
+typedef char *(*srpo_uci_transform_data_cb)(const char *value, void *private_data);
 
 typedef struct {
 	const char *xpath_template;
