@@ -26,7 +26,7 @@ The API consinst of the following elements:
   * `int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)`
   * `int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)`
   * `char *srpo_uci_section_name_get(const char *ucipath)`
-  * `int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb   *transform_sysrepo_data_cb)`
+  * `int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)`
   * `int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)`
   * `int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, const char **uci_section_type)`
   * `int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool *has_transform_sysrepo_data_private)`
@@ -56,6 +56,375 @@ The function takes:
   * data passed to the callback that needs to be used for transforming the data
   * user is resonsible for managing the private_data
   * can be NULL
-* return:
-  * funciton returns the transformed value as a string
+
+The function returns:
+  * the transformed value as a string
   * the return value can be NULL
+
+## srpo_uci_xpath_uci_template_map_t
+
+Structure for holding Sysrepo to UCI mapping. The mappings are organized in the following order
+* libyang list mapts to UCI section
+* libyang leaflist maps to UCI list
+* libyang leaf maps to UCI option
+
+To generalize the transformations the following attributes are placed in the structure:
+* xpath:
+  * constant string that represents a XPath to a libyang list, leaflist or leaf
+  * the string can contain a formater (i.e. '%s', '%d', etc.) so a specific libyang list XPath can be referenced using a specific XPath list key
+  * can not be NULL
+* ucipaht:
+  * constant string that represents a UCI path to a section, list or option
+  * the string can contain a formater (i.e. '%s', '%d', etc.) so a specific UCI section can be referenced using a specific section name
+  * can not be NULL
+* transform_sysrepo_data_cb:
+  * function pointer of type `char *(*srpo_uci_transform_data_cb)(const char *value, void *private_data)`
+  * used for additional transformations for a value that is from Sysrepo datastores
+  * can be NULL
+* transform_uci_data_cb:
+  * function pointer of type `char *(*srpo_uci_transform_data_cb)(const char *value, void *private_data)`
+  * used for additional transformations for a value that is read from UCI configuration file
+  * can be NULL
+* has_transform_sysrepo_data_private:
+  * boolean value
+  * gives information if the transform_sysrepo_data_cb callback function taks an additional argument as private data or not
+  * is ignored if the transform_sysrepo_data_cb is NULL
+* has_transform_uci_data_private:
+  * boolean value
+  * gives information if the transform_uci_data_cb callback function taks an additional argument as private data or not
+  * is ignored if the transform_uci_data_cb is NULL
+
+## int srpo_uci_init(void)
+
+Funciton for initializing the `srpo_uci` module. Needs to be called before any other `srpo_uci` module function.
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+
+## void srpo_uci_cleanup(void)
+
+Function for cleaning up all the module data needed in runtime. Needs to be called on application exit. After calling this function
+all other `srop_uci` API function calls should not be made because the result is undefined.
+
+## const char *srpo_uci_error_description_get(srpo_uci_error_e error)
+
+Function for retrieving the error descrioption string.
+
+Function argumetns:
+* error:
+  * an enumeration of type `srpo_uci_error_e`
+
+Function return:
+* constant string representing the error code description
+* the return string is a constant and should not be changed or freed
+* returns a default string if error is not part of `srpo_uci_error_e`
+
+## int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size)
+
+Function for retrieving UCI path consisting of package.section.option. The package and secions that are going to be retrieved are specifed by the argumets.
+
+Function argumets:
+* uci_config:
+  * constant string specifying the UCI configuration file
+  * only the name of the UCI file not the apsolute path
+  * can not be NULL
+* uci_seciton_list:
+  * list of constant string containing the name of the sections that are of interest in the specified UCI configuration file
+  * can not contain NULL elements in the array
+* uci_seciton_list_size:
+  * `size_t` number that specifies how many elements are in the `uci_seciton_list` list
+* ucipath_list:
+  * list to hold the resulting UCI paths of sections, lists and options
+  * allocated dinamically user needs to call free
+* ucipath_list_size:
+  * `size_t` number specifying how many elements are in the `ucipath_list` list
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)
+
+Function for converting the XPath to UCI path.
+
+Function arguments:
+* xpath:
+  * constant string containing the XPath to the desired libyang list, leaflist or leaf
+  * can not be NULL
+* xpath_uci_template_map:
+  * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped UCI path for the given XPath
+  * can not be NULL
+* xpath_uci_template_map_size:
+  * `size_t` number specifying the number of entries in the `xpath_uci_template_map` map
+* ucipath:
+  * string containing the resulting UCI path that is mapped with the provided `xpath`
+  * allocated dynamically user needs to call free
+
+Function return:
+* `SRPU_ERR_OK` on success
+* `SRPO_UCI_ERR_NOT_FOUND` if the `xpath` can't be found in the `xpath_uci_template_map`
+* `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)
+
+Function for converting the UCI path to XPath.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI section, list or option
+  * can not be NULL
+* uci_xpath_template_map:
+  * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped XPath for the given UCI path
+  * can not be NULL
+* uci_xpath_template_map_size:
+  * `size_t` number specifying the number of entries in the `uci_xpath_template_map` map
+* xpath:
+  * string containing the resulting Xpath that is mapped with the provided `ucipath`
+  * allocated dynamically user needs to call free
+
+Function return:
+* `SRPU_ERR_OK` on success
+* `SRPO_UCI_ERR_NOT_FOUND` if the `ucipath` can't be found in the `uci_xpath_template_map`
+* `srpo_uci_error_e` error code on failure
+
+## char *srpo_uci_section_name_get(const char *ucipath)
+
+Function for returning the section name from a UCI path.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI section, list or option
+  * can not be NULL
+
+Function return:
+* function returns a string with the UCI section name exstracted from the UCI path
+* if the UCI path doesnt contain a section name NULL is returned
+* allocated dynamically user needs to call free
+
+## int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)
+
+Function for returning the `srpo_uci_transform_data_cb` data transformation callback for Sysrepo data for a given `xpath`.
+
+Function arguments:
+* xpath:
+  * constant string containing the XPath to the desired libyang list, leaflist or leaf
+  * can not be NULL
+* xpath_uci_template_map:
+  * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped UCI path for the given XPath
+  * can not be NULL
+* xpath_uci_template_map_size:
+  * `size_t` number specifying the number of entries in the `xpath_uci_template_map` map
+* transform_sysrepo_data_cb:
+  * function pointer to the data transform callback for Sysrepo data
+  * can be NULL if no callback is registered for the provided `xpath`
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)
+
+Function for returning the `srpo_uci_transform_data_cb` data transformation callback for UCI data for a given `ucipath`.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI section, list or option
+  * can not be NULL
+* uci_xpath_template_map:
+  * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped XPath for the given UCI path
+  * can not be NULL
+* uci_xpath_template_map_size:
+  * `size_t` number specifying the number of entries in the `uci_xpath_template_map` map
+* transform_uci_data_cb:
+  * function pointer to the data transform callback for UCI data
+  * can be NULL if no callback is registered for the provided `ucipath`
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool *has_transform_sysrepo_data_private)
+
+Function for returnig the flag describing if the `srpo_uci_transform_data_cb` registered for the given `xpath` takes any additional arguments as private data.
+
+Function arguments:
+* xpath:
+  * constant string containing the XPath to the desired libyang list, leaflist or leaf
+  * can not be NULL
+* xpath_uci_template_map:
+  * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped UCI path for the given XPath
+  * can not be NULL
+* xpath_uci_template_map_size:
+  * `size_t` number specifying the number of entries in the `xpath_uci_template_map` map
+* has_transform_sysrepo_data_private
+  * returning boolean flag describining if the registered `srpo_uci_transform_data_cb` for transforming Sysrepo data takes any additional arguments as private data
+  * if no `srpo_uci_transform_data_cb` function is registered `false` is returned
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool *has_transform_uci_data_private)
+
+Function for returnig the flag describing if the `srpo_uci_transform_data_cb` registered for the given `ucipath` takes any additional arguments as private data.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI section, list or option
+  * can not be NULL
+* uci_xpath_template_map:
+  * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped XPath for the given UCI path
+  * can not be NULL
+* uci_xpath_template_map_size:
+  * `size_t` number specifying the number of entries in the `uci_xpath_template_map` map
+* has_transform_uci_data_private
+  * returning boolean flag describining if the registered `srpo_uci_transform_data_cb` for transforming UCI data takes any additional arguments as private data
+  * if no `srpo_uci_transform_data_cb` function is registered `false` is returned
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_section_create(const char *ucipath, const char *uci_section_type)
+
+Function for creating a new UCI section.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI section
+  * can not be NULL
+* uci_section_type:
+  * constant string specifyin the UCI section type
+  * section type depends on the UCI configuration in which the section is being created
+  * can not be NULL
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_section_delete(const char *ucipath)
+
+Function for deleting the UCI section.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI section
+  * can not be NULL
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_option_set(const char *ucipath, const char *value, srpo_uci_transform_data_cb transform_sysrepo_data_cb, void *private_data)
+
+Function for seting the value of an UCI option.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI option
+  * can not be NULL
+* value:
+  * string value of an UCI option
+  * can not be NULL
+* transform_sysrepo_data_cb
+  * function callback for transforimng the `value` before setting it to the UCI option specified by `ucipath`
+  * if NULL is returned the value will not be set and it will be silently ignored
+  * can be NULL
+* private_data
+  * data to be passed to the `transform_sysrepo_data_cb` function as the second argument
+  * can be NULL
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_option_remove(const char *ucipath)
+
+Function for removing an UCI option specified by the `ucipath`
+
+Function arguments:
+  * constant string containing the UCI path to the desired UCI option
+  * if the UCI option specified by the `ucipath` doesn't exist nothing will happen
+  * can not be NULL
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_list_set(const char *ucipath, const char *value, srpo_uci_transform_data_cb transform_sysrepo_data_cb, void *private_data)
+
+Function for adding a value for an UCI list.
+
+* ucipath:
+  * constant string containing the UCI path to the desired UCI option
+  * can not be NULL
+* value:
+  * string value of an UCI list
+  * can not be NULL
+* transform_sysrepo_data_cb
+  * function callback for transforimng the `value` before setting it to the UCI list specified by `ucipath`
+  * if NULL is returned the value will not be set and it will be silently ignored
+  * can be NULL
+* private_data
+  * data to be passed to the `transform_sysrepo_data_cb` function as the second argument
+  * can be NULL
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_list_remove(const char *ucipath, const char *value)
+
+Functio for removing a value from an UCI.
+
+* ucipath:
+  * constant string containing the UCI path to the desired UCI list
+  * can not be NULL
+* value:
+  * string value of an entry in the UCI list specifyed by `ucipath`
+  * can not be NULL
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_element_value_get(const char *ucipath, srpo_uci_transform_data_cb transform_uci_data_cb, void *private_data, char ***value_list, size_t *value_list_size)
+
+Function for getting the value of an UCI option or an UCI list.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI option or UCI list
+  * can not be NULL
+* transform_uci_data_cb:
+  * function for transforming data read from UCI configuration
+  * if NULL is returned the value will not be added to the value_list, it will be silently ignored
+  * can be NULL
+* private_data
+  * data to be passed to the `transform_sysrepo_data_cb` function as the second argument
+  * can be NULL
+* value_list:
+  * list of strings representing values of UCI option value or UCI list values
+  * if the `ucipath` referenced an UCI option `value_list` will contain only one element
+  * if the `ucipath` referenced an UCI list `value_list` will contain as much elements as there are values in an UCI list
+* value_list_size:
+  * `size_t` number specifying the number of entries in the `value_list` map
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_revert(const char *uci_config)
+
+Function for reverting changes made to UCI.
+
+Function arguments:
+* uci_config:
+  * constant string specifying the UCI configuration file
+  * only the name of the UCI file not the apsolute path
+  * can not be NULL
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_commit(const char *uci_config)
+
+Function for commiting the changes to a UCI configuration file.
+
+Function arguments:
+* uci_config:
+  * constant string specifying the UCI configuration file
+  * only the name of the UCI file not the apsolute path
+  * can not be NULL
+
+Function return:
+* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
