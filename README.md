@@ -99,7 +99,7 @@ To generalize the transformations the following attributes are placed in the str
 Funciton for initializing the `srpo_uci` module. Needs to be called before any other `srpo_uci` module function.
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 
 ## void srpo_uci_cleanup(void)
@@ -141,7 +141,7 @@ Function argumets:
   * `size_t` number specifying how many elements are in the `ucipath_list` list
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)
 
@@ -161,7 +161,7 @@ Function arguments:
   * allocated dynamically user needs to call free
 
 Function return:
-* `SRPU_ERR_OK` on success
+* `SRPO_UCI_ERR_OK` on success
 * `SRPO_UCI_ERR_NOT_FOUND` if the `xpath` can't be found in the `xpath_uci_template_map`
 * `srpo_uci_error_e` error code on failure
 
@@ -183,7 +183,7 @@ Function arguments:
   * allocated dynamically user needs to call free
 
 Function return:
-* `SRPU_ERR_OK` on success
+* `SRPO_UCI_ERR_OK` on success
 * `SRPO_UCI_ERR_NOT_FOUND` if the `ucipath` can't be found in the `uci_xpath_template_map`
 * `srpo_uci_error_e` error code on failure
 
@@ -219,7 +219,7 @@ Function arguments:
   * can be NULL if no callback is registered for the provided `xpath`
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)
 
@@ -239,7 +239,7 @@ Function arguments:
   * can be NULL if no callback is registered for the provided `ucipath`
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool *has_transform_sysrepo_data_private)
 
@@ -259,7 +259,7 @@ Function arguments:
   * if no `srpo_uci_transform_data_cb` function is registered `false` is returned
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool *has_transform_uci_data_private)
 
@@ -279,7 +279,7 @@ Function arguments:
   * if no `srpo_uci_transform_data_cb` function is registered `false` is returned
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_section_create(const char *ucipath, const char *uci_section_type)
 
@@ -295,7 +295,7 @@ Function arguments:
   * can not be NULL
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_section_delete(const char *ucipath)
 
@@ -307,7 +307,7 @@ Function arguments:
   * can not be NULL
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_option_set(const char *ucipath, const char *value, srpo_uci_transform_data_cb transform_sysrepo_data_cb, void *private_data)
 
@@ -329,7 +329,7 @@ Function arguments:
   * can be NULL
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_option_remove(const char *ucipath)
 
@@ -341,7 +341,7 @@ Function arguments:
   * can not be NULL
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_list_set(const char *ucipath, const char *value, srpo_uci_transform_data_cb transform_sysrepo_data_cb, void *private_data)
 
@@ -362,7 +362,7 @@ Function for adding a value for an UCI list.
   * can be NULL
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_list_remove(const char *ucipath, const char *value)
 
@@ -376,7 +376,7 @@ Functio for removing a value from an UCI.
   * can not be NULL
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_element_value_get(const char *ucipath, srpo_uci_transform_data_cb transform_uci_data_cb, void *private_data, char ***value_list, size_t *value_list_size)
 
@@ -401,7 +401,7 @@ Function arguments:
   * `size_t` number specifying the number of entries in the `value_list` map
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_revert(const char *uci_config)
 
@@ -414,7 +414,7 @@ Function arguments:
   * can not be NULL
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_commit(const char *uci_config)
 
@@ -427,4 +427,4 @@ Function arguments:
   * can not be NULL
 
 Function return:
-* `SRPU_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
+* `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure

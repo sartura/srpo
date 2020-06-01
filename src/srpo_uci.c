@@ -169,7 +169,7 @@ int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_l
 	return SRPO_UCI_ERR_OK;
 }
 
-int srpu_xpath_to_uci_path_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)
+int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)
 {
 	char *xpath_key_value = NULL;
 	char *xpath_tmp = NULL;
@@ -216,7 +216,7 @@ int srpu_xpath_to_uci_path_convert(const char *xpath, srpo_uci_xpath_uci_templat
 	return *ucipath ? SRPO_UCI_ERR_OK : SRPO_UCI_ERR_NOT_FOUND;
 }
 
-int srpu_uci_to_xpath_path_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)
+int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)
 {
 	char *xpath_tmp = NULL;
 	char *uci_section_name = NULL;
@@ -237,7 +237,7 @@ int srpu_uci_to_xpath_path_convert(const char *ucipath, srpo_uci_xpath_uci_templ
 	*xpath = xpath_tmp;
 
 	// get the section name for uci_path
-	uci_section_name = srpu_uci_section_name_get(ucipath);
+	uci_section_name = srpo_uci_section_name_get(ucipath);
 
 	// find the table entry that matches the uci path for the found uci section
 	for (size_t i = 0; i < uci_xpath_template_map_size; i++) {
