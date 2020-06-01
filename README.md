@@ -4,6 +4,53 @@ Sysrepo plugin Openwrt library for wrapping UCI and UBUS data operations.
 ## srpo_ubus - Sysrepo plugin Openwrt UBUS API
 ---
 
+This section describes the Sysrepo plugin Openwrt UBUS API. Functions and public data types are listed and described.
+
+The API consists of the following elements:
+* enumerations
+	* `srpo_ubus_error_e`
+* custom types
+	* `srpo_ubus_result_value_t`
+	* `srpo_ubus_result_values_t`
+	* `srpo_ubus_transform_data_cb`
+	* `srpo_ubus_transform_template_t`
+* functions
+	* `srpo_ubus_data_get`
+	* `srpo_ubus_init_result_values`
+	* `srpo_ubus_result_values_add`
+	* `srpo_ubus_free_result_values`
+	* `srpo_ubus_error_description_get`
+
+## srpo_ubus_error_e
+Represents errors that can occure inside the library, with the appropriate error codes and descriptions. The enum is returned by most SRPO ubus functions.
+
+## srpo_ubus_result_value_t
+Wraps a single value and the corresponding xpath that is used to store it to sysrepo. The value is received from ubus.
+
+## srpo_ubus_result_values
+A simple type that contains an array of result_vaule_t values, and its current size
+
+## srpo_ubus_transform_data_cb
+Defines the callback which is registered with srpo_ubus_data_get, and is then called internally by ubus, when ubus has the appropriate data ready. The type receives the ubus JSON result in a string, and is passed the values array which it should fill in with individual srpo_ubus_result_value_t values.
+
+## srpo_ubus_transform_template_t
+Contains the abovementioned transform callback, and the ubus method and lookup_path which are used during the ubus call. It is used to wrap the data passed to srpo_ubus_data_get
+
+## srpo_ubus_data_get
+Set up and initiate an ubus call. Passes the srpo_ubus_result_values_t array to the transform callback passed in the transform template.
+
+## srpo_ubus_init_result_values
+Initialize the srpo_ubus_result_values_t array type.
+
+## srpo_ubus_result_values_add
+Add a srpo_ubus_result_value_t value to the values array. The value is passed as a string. Additionally an xpath template is passed, which then completes the value xpath together with the xpath_value.
+
+## srpo_ubus_free_result_values
+Free the ubus result values array.
+
+## srpo_ubus_error_description_get
+Get a string description of the SRPO ubus error enum.
+
 ## srpo_uci - Sysrepo plugin Openwrt UCI API
 ---
 
