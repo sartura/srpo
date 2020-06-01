@@ -50,7 +50,16 @@ cleanup:
 
 const char *srpo_ubus_error_description_get(srpo_ubus_error_e error)
 {
-	return "ok";
+	switch (error) {
+#define XM(ENUM, CODE, DESCRIPTION) \
+	case ENUM: 			\
+		return DESCRIPTION;
+
+		SRPO_UBUS_ERROR_TABLE
+#undef XM
+		default:
+			return "unknown error code";
+	}
 }
 
 static void ubus_data_cb(struct ubus_request *req, int type, struct blob_attr *msg)
