@@ -25,31 +25,63 @@ The API consists of the following elements:
 Represents errors that can occure inside the library, with the appropriate error codes and descriptions. The enum is returned by most SRPO ubus functions.
 
 ## srpo_ubus_result_value_t
-Wraps a single value and the corresponding xpath that is used to store it to sysrepo. The value is received from ubus.
+Tracks the value and xpath that will be stored in sysrepo as a libyang data node. As the xpath specifies where the data will be inserted they are kept together in this structure. The sysrepo plugin should set both the value and xpath.
 
 ## srpo_ubus_result_values
 A simple type that contains an array of result_vaule_t values, and its current size
 
-## srpo_ubus_transform_data_cb
-Defines the callback which is registered with srpo_ubus_data_get, and is then called internally by ubus, when ubus has the appropriate data ready. The type receives the ubus JSON result in a string, and is passed the values array which it should fill in with individual srpo_ubus_result_value_t values.
+## void (*srpo_ubus_transform_data_cb)(const char *ubus_json, srpo_ubus_result_values_t *values)
+Function pointer type that defines the callback which is registered with srpo_ubus_data_get, and is then called internally by ubus, when ubus has the call data ready. The type receives the ubus JSON result in a string, and is passed the values array which it should fill in with individual srpo_ubus_result_value_t values.
+
+Parameters:
+* [in] ubus_json - string that contains the JSON received from the ubus call, called by srpo_ubus_data_get
+* [in] values - array of srpo_ubus_result_values_t values, that have to be filled by the callback by parsing ubos_json
 
 ## srpo_ubus_transform_template_t
 Contains the abovementioned transform callback, and the ubus method and lookup_path which are used during the ubus call. It is used to wrap the data passed to srpo_ubus_data_get
 
-## srpo_ubus_data_get
-Set up and initiate an ubus call. Passes the srpo_ubus_result_values_t array to the transform callback passed in the transform template.
+## srpo_ubus_error_e srpo_ubus_data_get(srpo_ubus_result_values_t *values, srpo_ubus_transform_template_t *transform)
+Set up and initiate an ubus call with the lookup_path and method specified in the transform template. Passes the srpo_ubus_result_values_t array to the transform callback passed in the transform template.
 
-## srpo_ubus_init_result_values
+Parameters:
+* [in] values - srpo_ubus_result_value_t array that will be passed to the transform callback
+* [in] transform - a transform template that contains the callback that will be called by ubus, the ubus lookup_path and ubus method
+
+Return:
+* error code (SRPO_UBUS_ERR_OK on success)
+
+## void srpo_ubus_init_result_values(srpo_ubus_result_values_t **values)
 Initialize the srpo_ubus_result_values_t array type.
+
+Parameters:
+* [in] values, srpo_ubus_result_values_t array to be initialized
 
 ## srpo_ubus_result_values_add
 Add a srpo_ubus_result_value_t value to the values array. The value is passed as a string. Additionally an xpath template is passed, which then completes the value xpath together with the xpath_value.
 
+Parameters:
+* [in] values - values array to add new value to
+* [in] value - string value to add to the array
+* [in] xpath_template - xpath template, the static part of the xpath corresponding to the value
+* [in] xpath_value - xpath value, dynamic part of the xpath
+
+Return:
+* error code (SRPO_UBUS_ERR_OK on success)
+
 ## srpo_ubus_free_result_values
 Free the ubus result values array.
 
+Parameters:
+* [in] values - array to free
+
 ## srpo_ubus_error_description_get
 Get a string description of the SRPO ubus error enum.
+
+Parameters:
+[in] error - srpo_ubus_error_e enum
+
+Return
+* string description of the error
 
 ## srpo_uci - Sysrepo plugin Openwrt UCI API
 ---
