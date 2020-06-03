@@ -57,13 +57,16 @@ Parameters:
 * [in] values, srpo_ubus_result_values_t array to be initialized
 
 ## srpo_ubus_result_values_add
-Add a srpo_ubus_result_value_t value to the values array. The value is passed as a string. Additionally an xpath template is passed, which then completes the value xpath together with the xpath_value.
+Add a srpo_ubus_result_value_t value to the values array. The value is passed as a string. Additionally an xpath template is passed, which then completes the value xpath together with the xpath_value. If the xpath_template is NULL, the xpath_value is used as the srpo_ubus_result_value_t xpath. value and xpath_value must not be NULL.
 
 Parameters:
 * [in] values - values array to add new value to
 * [in] value - string value to add to the array
+* [in] values_size - length of the value string
 * [in] xpath_template - xpath template, the static part of the xpath corresponding to the value
+* [in] xpath_template_size - length of the xpath_template string
 * [in] xpath_value - xpath value, dynamic part of the xpath
+* [in] xpath_value_size - xpath value string length
 
 Return:
 * error code (SRPO_UBUS_ERR_OK on success)

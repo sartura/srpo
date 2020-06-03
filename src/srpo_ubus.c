@@ -77,22 +77,30 @@ static void ubus_data_cb(struct ubus_request *req, int type, struct blob_attr *m
 	return;
 }
 
-srpo_ubus_error_e srpo_ubus_result_values_add(srpo_ubus_result_values_t *values, const char *value, const char *xpath_template, const char *xpath_value)
+srpo_ubus_error_e srpo_ubus_result_values_add(srpo_ubus_result_values_t *values, const char *value, size_t value_size, const char *xpath_template, size_t xpath_template_size, const char *xpath_value, size_t xpath_value_size)
 {
-	srpo_ubus_error_e error = SRPO_UBUS_ERR_OK;
-	size_t xpath_len = 0;
+
+	if (value == NULL) {
+		return SRPO_UBUS_ERR_ARG;
+	}
+
+	if (xpath_value == NULL) {
+		return SRPO_UBUS_ERR_ARG;
+	}
 
 	values->values = xrealloc(values->values, sizeof(srpo_ubus_result_value_t) * (values->num_values + 1));
-	//TODO check for buffer overflow
-	values->values[values->num_values].value = xstrdup(value);
-	//TODO check for buffer overflow
-	xpath_len = strlen(xpath_template) + strlen(xpath_value);
-	values->values[values->num_values].xpath = xmalloc(xpath_len + 1);
-	snprintf(values->values[values->num_values].xpath, xpath_len, xpath_template, xpath_value);
+	values->values[values->num_values].value = xstrndup(value, value_size);
+	values->values[values->num_values].xpath = xmalloc(xpath_template_size + xpath_value_size);
+
+	if (xpath_template == NULL) {
+		memcpy(values->values[values->num_values].xpath, xpath_value, xpath_value_size);
+	} else {
+		snprintf(values->values[values->num_values].xpath, xpath_template_size + xpath_value_size, xpath_template, xpath_value);
+	}
 
 	values->num_values++;
 
-	return error;
+	return SRPO_UBUS_ERR_OK;
 }
 
 void srpo_ubus_init_result_values(srpo_ubus_result_values_t **values)

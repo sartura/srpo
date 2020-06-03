@@ -27,7 +27,9 @@
 typedef enum {
 #define SRPO_UBUS_ERROR_TABLE          \
 	XM(SRPO_UBUS_ERR_OK, 0, "Success") \
-	XM(SRPO_UBUS_ERR_INTERNAL, -1, "Internal UBUS error")
+	XM(SRPO_UBUS_ERR_INTERNAL, -1, "Internal UBUS error") \
+	XM(SRPO_UBUS_ERR_ARG, -2, "Invalid function argument given")
+
 #define XM(ENUM, CODE, DESCRIPTION) ENUM = CODE,
 	SRPO_UBUS_ERROR_TABLE
 #undef XM
@@ -54,7 +56,7 @@ typedef struct {
 srpo_ubus_error_e srpo_ubus_data_get(srpo_ubus_result_values_t *values, srpo_ubus_transform_template_t *transform);
 
 void srpo_ubus_init_result_values(srpo_ubus_result_values_t **values);
-srpo_ubus_error_e srpo_ubus_result_values_add(srpo_ubus_result_values_t *values, const char *value, const char *xpath_template, const char *xpath_value);
+srpo_ubus_error_e srpo_ubus_result_values_add(srpo_ubus_result_values_t *values, const char *value, size_t value_size, const char *xpath_template, size_t xpath_template_size, const char *xpath_value, size_t xpath_value_size);
 void srpo_ubus_free_result_values(srpo_ubus_result_values_t *values);
 
 const char *srpo_ubus_error_description_get(srpo_ubus_error_e error);
