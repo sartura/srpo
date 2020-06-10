@@ -13,9 +13,9 @@ The API consists of the following elements:
 	* `srpo_ubus_result_value_t`
 	* `srpo_ubus_result_values_t`
 	* `srpo_ubus_transform_data_cb`
-	* `srpo_ubus_transform_template_t`
+	* `srpo_ubus_call_data_t`
 * functions
-	* `srpo_ubus_data_get`
+	* `srpo_ubus_call`
 	* `srpo_ubus_init_result_values`
 	* `srpo_ubus_result_values_add`
 	* `srpo_ubus_free_result_values`
@@ -31,21 +31,21 @@ Tracks the value and xpath that will be stored in sysrepo as a libyang data node
 A simple type that contains an array of result_vaule_t values, and its current size
 
 ## void (*srpo_ubus_transform_data_cb)(const char *ubus_json, srpo_ubus_result_values_t *values)
-Function pointer type that defines the callback which is registered with srpo_ubus_data_get, and is then called internally by ubus, when ubus has the call data ready. The type receives the ubus JSON result in a string, and is passed the values array which it should fill in with individual srpo_ubus_result_value_t values.
+Function pointer type that defines the callback which is registered with srpo_ubus_call, and is then called internally by ubus, when ubus has the call data ready. The type receives the ubus JSON result in a string, and is passed the values array which it should fill in with individual srpo_ubus_result_value_t values.
 
 Parameters:
-* [in] ubus_json - string that contains the JSON received from the ubus call, called by srpo_ubus_data_get
+* [in] ubus_json - string that contains the JSON received from the ubus call, called by srpo_ubus_call
 * [in] values - array of srpo_ubus_result_values_t values, that have to be filled by the callback by parsing ubos_json
 
-## srpo_ubus_transform_template_t
-Contains the abovementioned transform callback, and the ubus method and lookup_path which are used during the ubus call. It is used to wrap the data passed to srpo_ubus_data_get
+## srpo_ubus_call_data_t
+Contains the abovementioned transform callback, the ubus method and lookup_path, timeout and a json string containing additional data for the ubus invoke call. All of the data fields are used during the ubus call. It is used to wrap the data passed to srpo_ubus_call
 
-## srpo_ubus_error_e srpo_ubus_data_get(srpo_ubus_result_values_t *values, srpo_ubus_transform_template_t *transform)
-Set up and initiate an ubus call with the lookup_path and method specified in the transform template. Passes the srpo_ubus_result_values_t array to the transform callback passed in the transform template.
+## srpo_ubus_error_e srpo_ubus_call(srpo_ubus_result_values_t *values, srpo_ubus_call_data_t *transform)
+Set up and initiate an ubus call with the lookup_path, method, timeout and json string arguments specified in the transform template. Passes the srpo_ubus_result_values_t array to the transform callback passed in the transform template. The json_call_arguments string can be NULL. A timeout of 0 means no waiting for the ubus call. If the srpo_ubus_transform_data_cb element is NULL then no callback is registered to process the ubus response data.
 
 Parameters:
 * [in] values - srpo_ubus_result_value_t array that will be passed to the transform callback
-* [in] transform - a transform template that contains the callback that will be called by ubus, the ubus lookup_path and ubus method
+* [in] call_args - a data structure that contains the callback that will be called by ubus, the ubus lookup_path and ubus method, the timeout and any additional json arguments for the ubus call
 
 Return:
 * error code (SRPO_UBUS_ERR_OK on success)

@@ -50,10 +50,12 @@ typedef void (*srpo_ubus_transform_data_cb)(const char *ubus_json, srpo_ubus_res
 typedef struct {
 	const char *lookup_path;
 	const char *method;
+	const char *json_call_arguments;
+	int timeout;
 	srpo_ubus_transform_data_cb transform_data_cb;
-} srpo_ubus_transform_template_t;
+} srpo_ubus_call_data_t;
 
-srpo_ubus_error_e srpo_ubus_data_get(srpo_ubus_result_values_t *values, srpo_ubus_transform_template_t *transform);
+srpo_ubus_error_e srpo_ubus_call(srpo_ubus_result_values_t *values, srpo_ubus_call_data_t *transform);
 
 void srpo_ubus_init_result_values(srpo_ubus_result_values_t **values);
 srpo_ubus_error_e srpo_ubus_result_values_add(srpo_ubus_result_values_t *values, const char *value, size_t value_size, const char *xpath_template, size_t xpath_template_size, const char *xpath_value, size_t xpath_value_size);

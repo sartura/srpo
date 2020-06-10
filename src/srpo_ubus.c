@@ -1,6 +1,7 @@
 #include <libubus.h>
 #include <libubox/blobmsg.h>
 #include <libubox/blobmsg_json.h>
+#include <stdio.h>
 
 #include "srpo_ubus.h"
 #include "utils/memory.h"
@@ -12,30 +13,41 @@ typedef struct {
 
 static void ubus_data_cb(struct ubus_request *req, int type, struct blob_attr *msg);
 
-srpo_ubus_error_e srpo_ubus_data_get(srpo_ubus_result_values_t *values, srpo_ubus_transform_template_t *transform)
+srpo_ubus_error_e srpo_ubus_call(srpo_ubus_result_values_t *values, srpo_ubus_call_data_t *call_args)
 {
 	srpo_ubus_error_e error = SRPO_UBUS_ERR_OK;
 	struct ubus_context *ubus_ctx = NULL;
 	struct blob_buf buf = {0};
 	int ubus_error = UBUS_STATUS_OK;
 	uint32_t id = 0;
-	srpo_ubus_invoke_wrapper_t *ubus_wrapper = &((srpo_ubus_invoke_wrapper_t){.transform_data_cb = transform->transform_data_cb, .values = values});
+	srpo_ubus_invoke_wrapper_t *ubus_wrapper = &((srpo_ubus_invoke_wrapper_t){.transform_data_cb = call_args->transform_data_cb, .values = values});
 
 	ubus_ctx = ubus_connect(NULL);
 	if (ubus_ctx == NULL) {
+		printf("ubus connect failed\n");
 		error = SRPO_UBUS_ERR_INTERNAL;
 		goto cleanup;
 	}
 
 	blob_buf_init(&buf, 0);
-	ubus_error = ubus_lookup_id(ubus_ctx, transform->lookup_path, &id);
+	ubus_error = ubus_lookup_id(ubus_ctx, call_args->lookup_path, &id);
 	if (ubus_error != UBUS_STATUS_OK) {
+		printf("ubus lookup id failed %d\n", ubus_error == UBUS_STATUS_NOT_FOUND);
 		error = SRPO_UBUS_ERR_INTERNAL;
 		goto cleanup;
 	}
 
-	ubus_error = ubus_invoke(ubus_ctx, id, transform->method, buf.head, ubus_data_cb, ubus_wrapper, 0);
+	if (call_args->json_call_arguments) {
+		blobmsg_add_json_from_string(&buf, call_args->json_call_arguments);
+	}
+
+	if (call_args->transform_data_cb == NULL) {
+		ubus_error = ubus_invoke(ubus_ctx, id, call_args->method, buf.head, NULL, ubus_wrapper, call_args->timeout);
+	} else {
+		ubus_error = ubus_invoke(ubus_ctx, id, call_args->method, buf.head, ubus_data_cb, ubus_wrapper, call_args->timeout);
+	}
 	if (ubus_error != UBUS_STATUS_OK) {
+		printf("ubus invoke failed\n");
 		error = SRPO_UBUS_ERR_INTERNAL;
 		goto cleanup;
 	}
