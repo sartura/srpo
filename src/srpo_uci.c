@@ -511,33 +511,22 @@ static char *xpath_key_value_get(const char *xpath)
 
 char *srpo_uci_section_name_get(const char *ucipath)
 {
-	char *uci_section_name_begin = NULL;
-	char *uci_section_name_end = NULL;
-	char *uci_section_name = NULL;
-	size_t uci_section_name_size = 0;
+	int error = 0;
+	struct uci_ptr uci_ptr = {0};
+	char *uci_data = NULL;
+	char *value_tmp = NULL;
 
-	if (ucipath == NULL) {
-		return NULL;
-	}
+	uci_data = xstrdup(ucipath);
+	error = uci_parse_ptr(uci_context, &uci_ptr, uci_data);
+	if (error)
+		goto out;
 
-	uci_section_name_begin = strchr(ucipath, '.');
-	if (uci_section_name_begin == NULL) {
-		return NULL;
-	}
+	value_tmp = xstrdup(uci_ptr.section);
 
-	uci_section_name_begin++;
-	uci_section_name_end = strchr(uci_section_name_begin, '.');
-	if (uci_section_name_end) {
-		uci_section_name_size = (size_t) uci_section_name_end - (size_t) uci_section_name_begin + 1;
-	} else {
-		uci_section_name_size = strlen(uci_section_name_begin) + 1;
-	}
+out:
+	FREE_SAFE(uci_data);
 
-	uci_section_name = xcalloc(1, uci_section_name_size);
-	strncpy(uci_section_name, uci_section_name_begin, uci_section_name_size - 1);
-	uci_section_name[uci_section_name_size - 1] = '\0';
-
-	return uci_section_name;
+	return value_tmp;
 }
 
 int srpo_uci_section_create(const char *ucipath, const char *uci_section_type)
