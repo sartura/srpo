@@ -63,6 +63,7 @@ int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_l
 
 int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath);
 int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath);
+int srpo_uci_sublist_ucipath_to_xpath_convert(const char *ucipath, const char *xpath_parent_template, const char *ucipath_parent_template, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath);
 
 char *srpo_uci_section_name_get(const char *ucipath);
 

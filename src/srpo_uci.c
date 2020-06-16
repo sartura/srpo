@@ -263,6 +263,82 @@ int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_te
 	return *xpath ? SRPO_UCI_ERR_OK : SRPO_UCI_ERR_NOT_FOUND;
 }
 
+int srpo_uci_sublist_ucipath_to_xpath_convert(const char *ucipath, const char *xpath_parent_template, const char *ucipath_parent_template, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)
+{
+
+	int error = 0;
+	char *xpath_parent_tmp = NULL;
+	char *xpath_tmp = NULL;
+	size_t xpath_tmp_size = 0;
+	char *uci_section_name = NULL;
+	char *ucipath_tmp = NULL;
+	char **uci_value_list = NULL;
+	size_t uci_value_list_size = 0;
+
+	if (ucipath == NULL || xpath == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	if (xpath_parent_template == NULL || ucipath_parent_template == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	if (uci_xpath_template_map == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	// get the section name for uci_path
+	uci_section_name = srpo_uci_section_name_get(ucipath);
+
+	// find the table entry that matches the uci path for the found uci section
+	for (size_t i = 0; i < uci_xpath_template_map_size; i++) {
+		if (uci_xpath_template_map[i].xpath_template == NULL || uci_xpath_template_map[i].ucipath_template == NULL) {
+			FREE_SAFE(uci_section_name);
+			return SRPO_UCI_ERR_TABLE_ENTRY;
+		}
+
+		ucipath_tmp = path_from_template_get(uci_xpath_template_map[i].ucipath_template, uci_section_name);
+		if (strcmp(ucipath, ucipath_tmp) != 0) {
+			FREE_SAFE(ucipath_tmp);
+			/* does not match format specifier */
+			continue;
+		}
+
+		ucipath_tmp = path_from_template_get(ucipath_parent_template, uci_section_name);
+		error = srpo_uci_element_value_get(ucipath_tmp, NULL, NULL, &uci_value_list, &uci_value_list_size);
+		if (error || uci_value_list_size != 1) {
+			FREE_SAFE(uci_section_name);
+			return SRPO_UCI_ERR_TABLE_ENTRY;
+		}
+
+		xpath_parent_tmp = path_from_template_get(xpath_parent_template, uci_value_list[0]);
+		ucipath_tmp = path_from_template_get(uci_xpath_template_map[i].xpath_template, uci_section_name);
+
+		xpath_tmp_size = strlen(xpath_parent_tmp) + 1 + strlen(ucipath_tmp) + 1;
+		xpath_tmp = xmalloc(xpath_tmp_size);
+		snprintf(xpath_tmp, xpath_tmp_size, "%s%s", xpath_parent_tmp, ucipath_tmp);
+
+		FREE_SAFE(uci_value_list[0]);
+		FREE_SAFE(xpath_parent_tmp);
+		FREE_SAFE(ucipath_tmp);
+
+		/* matched format specifier */
+		break;
+	}
+
+	*xpath = xpath_tmp;
+
+	for (size_t i = 0; i < uci_value_list_size; i++) {
+		FREE_SAFE(uci_value_list[i]);
+	}
+	FREE_SAFE(uci_value_list);
+
+	FREE_SAFE(ucipath_tmp);
+	FREE_SAFE(uci_section_name);
+
+	return *xpath ? SRPO_UCI_ERR_OK : SRPO_UCI_ERR_NOT_FOUND;
+}
+
 int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)
 {
 

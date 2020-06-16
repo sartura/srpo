@@ -107,6 +107,7 @@ The API consinst of the following elements:
   * `int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size, bool convert_to_extended)`
   * `int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)`
   * `int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)`
+  * `int srpo_uci_sublist_ucipath_to_xpath_convert(const char *ucipath, const char *xpath_parent_template, const char *ucipath_parent_template, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath);`
   * `char *srpo_uci_section_name_get(const char *ucipath)`
   * `int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)`
   * `int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)`
@@ -256,6 +257,34 @@ Function for converting the UCI path to XPath.
 Function arguments:
 * ucipath:
   * constant string containing the UCI path to the desired UCI section, list or option
+  * can not be NULL
+* uci_xpath_template_map:
+  * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped XPath for the given UCI path
+  * can not be NULL
+* uci_xpath_template_map_size:
+  * `size_t` number specifying the number of entries in the `uci_xpath_template_map` map
+* xpath:
+  * string containing the resulting Xpath that is mapped with the provided `ucipath`
+  * allocated dynamically user needs to call free
+
+Function return:
+* `SRPO_UCI_ERR_OK` on success
+* `SRPO_UCI_ERR_NOT_FOUND` if the `ucipath` can't be found in the `uci_xpath_template_map`
+* `srpo_uci_error_e` error code on failure
+
+## int srpo_uci_sublist_ucipath_to_xpath_convert(const char *ucipath, const char *xpath_parent_template, const char *ucipath_parent_template, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath);
+
+Function for converting the UCI path to XPath, as a sublist.
+
+Function arguments:
+* ucipath:
+  * constant string containing the UCI path to the desired UCI section, list or option
+  * can not be NULL
+* xpath_parent_template:
+  * constant string containing the parent node XPath
+  * can not be NULL
+* ucipath_parent_template:
+  * constant string containing the parent node UCI path
   * can not be NULL
 * uci_xpath_template_map:
   * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped XPath for the given UCI path
