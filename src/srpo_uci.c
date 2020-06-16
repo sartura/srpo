@@ -69,7 +69,7 @@ const char *srpo_uci_error_description_get(srpo_uci_error_e error)
 	}
 }
 
-int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size)
+int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size, bool convert_to_extended)
 {
 	int error = SRPO_UCI_ERR_OK;
 	struct uci_package *package = NULL;
@@ -112,7 +112,7 @@ int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_l
 		section = uci_to_section(element_section);
 		for (size_t i = 0; i < uci_section_list_size; i++) {
 			if (strcmp(section->type, uci_section_list[i]) == 0) {
-				if (section->anonymous) { // hande name conversion from cfgXXXXX to @section_type[index] for anonymous sections
+				if (section->anonymous && convert_to_extended) { // hande name conversion from cfgXXXXX to @section_type[index] for anonymous sections
 					anonymous_section_index = 0;
 					anonymous_section_exists = false;
 					for (size_t j = 0; j < anonymous_section_list_size; j++) {

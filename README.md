@@ -104,7 +104,7 @@ The API consinst of the following elements:
   * `int srpo_uci_init(void)`
   * `void srpo_uci_cleanup(void)`
   * `const char *srpo_uci_error_description_get(srpo_uci_error_e error)`
-  * `int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size)`
+  * `int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size, bool convert_to_extended)`
   * `int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)`
   * `int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)`
   * `char *srpo_uci_section_name_get(const char *ucipath)`
@@ -202,7 +202,7 @@ Function return:
 * the return string is a constant and should not be changed or freed
 * returns a default string if error is not part of `srpo_uci_error_e`
 
-## int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size)
+## int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size, bool convert_to_extended)
 
 Function for retrieving UCI path consisting of package.section.option. The package and secions that are going to be retrieved are specifed by the argumets.
 
@@ -221,6 +221,8 @@ Function argumets:
   * allocated dinamically user needs to call free
 * ucipath_list_size:
   * `size_t` number specifying how many elements are in the `ucipath_list` list
+* convert_to_extended:
+  * `bool` whether to convert unnamed UCI sections to extended UCI syntax
 
 Function return:
 * `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
