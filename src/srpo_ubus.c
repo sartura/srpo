@@ -85,6 +85,7 @@ static void ubus_data_cb(struct ubus_request *req, int type, struct blob_attr *m
 
 	json_result = blobmsg_format_json(msg, true);
 	private_data->transform_data_cb(json_result, private_data->values);
+	FREE_SAFE(json_result);
 
 	return;
 }
