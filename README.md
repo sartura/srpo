@@ -12,6 +12,7 @@ The API consists of the following elements:
 * custom types
 	* `srpo_ubus_result_value_t`
 	* `srpo_ubus_result_values_t`
+	* `srpo_ubus_transform_path_cb`
 	* `srpo_ubus_transform_data_cb`
 	* `srpo_ubus_call_data_t`
 * functions
@@ -96,6 +97,7 @@ Aditionally if the API defines a structure or any other data their meaning will 
 The API consinst of the following elements:
 * enumerations:
   * `srpo_uci_error_e`
+  * `srpo_uci_path_direction_t`
 * function pointers:
   * `char *(*srpo_uci_transform_data_cb)(const char *uci_value, void *private_data)`
 * structures:
@@ -107,8 +109,8 @@ The API consinst of the following elements:
   * `int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size, bool convert_to_extended)`
   * `int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)`
   * `int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)`
-  * `int srpo_uci_sublist_ucipath_to_xpath_convert(const char *ucipath, const char *xpath_parent_template, const char *ucipath_parent_template, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath);`
   * `char *srpo_uci_section_name_get(const char *ucipath)`
+  * `int srpo_uci_path_get(const char *target, const char *from_template, const char *to_template, srpo_uci_transform_path_cb transform_path_cb, srpo_uci_path_direction_t direction, char **path)`
   * `int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)`
   * `int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)`
   * `int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, const char **uci_section_type)`
@@ -128,9 +130,12 @@ The API consinst of the following elements:
 
 The enumeration represents error codes that can occure inside the library. Each error has its description assign to it.
 
+## srpo_uci_path_direction_t
+Represents whether a path is converted from UCI to XPath (with `SRPO_UCI_PATH_DIRECTION_XPATH`), or whether the path is converted from XPath into UCI path (with `SRPO_UCI_PATH_DIRECTION_UCI`).
+
 ## char *(*srpo_uci_transform_data_cb)(const char *value, void *private_data)
 
-Function pointer used for functions that are used for transforimg data read, either from UCI or Sysrepo datastores, and before setting them to Sysrepo datastores or UCI.
+Function pointer used for functions that are used for transforming data read, either from UCI or Sysrepo datastores, and before setting them to Sysrepo datastores or UCI.
 
 The function takes:
 * value:
@@ -144,6 +149,33 @@ The function returns:
   * the transformed value as a string
   * the return value can be NULL
 
+## int (*srpo_uci_transform_path_cb)(const char *target, const char *from, const char *to, srpo_uci_path_direction_t direction, char **path)
+
+Function pointer that defines a callback which is called when specified as part of the `srpo_uci_xpath_uci_template_map_t` map for a specific transformation entry.
+
+Function arguments:
+* target:
+  * constant string containing either the UCI or XPath
+* from_template:
+  * constant string containing the template from which the conversion is made
+  * can not be NULL
+* to_template:
+  * constant string containing the template to which the conversion is made
+  * can not be NULL
+* transform_path_cb:
+  * specifies a custom `srpo_uci_transform_path_cb` function which will be responsible for generating the path
+* direction:
+  * a boolean variable which specifies whether the conversion is from UCI to XPath or vice-versa
+* path
+  * string containing the resulting UCI or XPath
+  * allocated dynamically user needs to call free
+
+Function return:
+* `SRPO_UCI_ERR_OK` on success
+* `SRPO_UCI_ERR_NOT_FOUND` if either the UCI or the XPath can't be found in the `uci_xpath_template_map`
+* `SRPO_UCI_ERR_ARGUMENT` if the `ucipath` can't be found in the `uci_xpath_template_map`
+* `srpo_uci_error_e` error code on failure
+
 ## srpo_uci_xpath_uci_template_map_t
 
 Structure for holding Sysrepo to UCI mapping. The mappings are organized in the following order
@@ -156,7 +188,7 @@ To generalize the transformations the following attributes are placed in the str
   * constant string that represents a XPath to a libyang list, leaflist or leaf
   * the string can contain a formater (i.e. '%s', '%d', etc.) so a specific libyang list XPath can be referenced using a specific XPath list key
   * can not be NULL
-* ucipaht:
+* ucipath:
   * constant string that represents a UCI path to a section, list or option
   * the string can contain a formater (i.e. '%s', '%d', etc.) so a specific UCI section can be referenced using a specific section name
   * can not be NULL
@@ -179,7 +211,7 @@ To generalize the transformations the following attributes are placed in the str
 
 ## int srpo_uci_init(void)
 
-Funciton for initializing the `srpo_uci` module. Needs to be called before any other `srpo_uci` module function.
+Function for initializing the `srpo_uci` module. Needs to be called before any other `srpo_uci` module function.
 
 Function return:
 * `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
@@ -272,34 +304,6 @@ Function return:
 * `SRPO_UCI_ERR_NOT_FOUND` if the `ucipath` can't be found in the `uci_xpath_template_map`
 * `srpo_uci_error_e` error code on failure
 
-## int srpo_uci_sublist_ucipath_to_xpath_convert(const char *ucipath, const char *xpath_parent_template, const char *ucipath_parent_template, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath);
-
-Function for converting the UCI path to XPath, as a sublist.
-
-Function arguments:
-* ucipath:
-  * constant string containing the UCI path to the desired UCI section, list or option
-  * can not be NULL
-* xpath_parent_template:
-  * constant string containing the parent node XPath
-  * can not be NULL
-* ucipath_parent_template:
-  * constant string containing the parent node UCI path
-  * can not be NULL
-* uci_xpath_template_map:
-  * map of type `srpo_uci_xpath_uci_template_map_t` used for finding the mapped XPath for the given UCI path
-  * can not be NULL
-* uci_xpath_template_map_size:
-  * `size_t` number specifying the number of entries in the `uci_xpath_template_map` map
-* xpath:
-  * string containing the resulting Xpath that is mapped with the provided `ucipath`
-  * allocated dynamically user needs to call free
-
-Function return:
-* `SRPO_UCI_ERR_OK` on success
-* `SRPO_UCI_ERR_NOT_FOUND` if the `ucipath` can't be found in the `uci_xpath_template_map`
-* `srpo_uci_error_e` error code on failure
-
 ## char *srpo_uci_section_name_get(const char *ucipath)
 
 Function for returning the section name from a UCI path.
@@ -313,6 +317,33 @@ Function return:
 * function returns a string with the UCI section name exstracted from the UCI path
 * if the UCI path doesnt contain a section name NULL is returned
 * allocated dynamically user needs to call free
+
+## int srpo_uci_path_get(const char *target, const char *from_template, const char *to_template, srpo_uci_transform_path_cb transform_path_cb, srpo_uci_path_direction_t direction, char **path)
+
+Function for constructing XPath from UCI path, or an UCI path from an XPath.
+
+Function arguments:
+* target:
+  * constant string containing either the UCI or XPath
+* from_template:
+  * constant string containing the template from which the conversion is made
+  * can not be NULL
+* to_template:
+  * constant string containing the template to which the conversion is made
+  * can not be NULL
+* transform_path_cb:
+  * specifies a custom `srpo_uci_transform_path_cb` function which will be responsible for generating the path
+* direction:
+  * a boolean variable which specifies whether the conversion is from UCI to XPath or vice-versa
+* path
+  * string containing the resulting UCI or XPath
+  * allocated dynamically user needs to call free
+
+Function return:
+* `SRPO_UCI_ERR_OK` on success
+* `SRPO_UCI_ERR_NOT_FOUND` if either the UCI or the XPath can't be found in the `uci_xpath_template_map`
+* `SRPO_UCI_ERR_ARGUMENT` if the `ucipath` can't be found in the `uci_xpath_template_map`
+* `srpo_uci_error_e` error code on failure
 
 ## int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)
 

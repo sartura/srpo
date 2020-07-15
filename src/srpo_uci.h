@@ -42,12 +42,19 @@ typedef enum {
 #undef XM
 } srpo_uci_error_e;
 
+typedef enum {
+	SRPO_UCI_PATH_DIRECTION_UCI = 0,
+	SRPO_UCI_PATH_DIRECTION_XPATH,
+} srpo_uci_path_direction_t;
+
 typedef char *(*srpo_uci_transform_data_cb)(const char *value, void *private_data);
+typedef int (*srpo_uci_transform_path_cb)(const char *target, const char *from, const char *to, srpo_uci_path_direction_t direction, char **path);
 
 typedef struct {
 	const char *xpath_template;
 	const char *ucipath_template;
 	const char *uci_section_type;
+	srpo_uci_transform_path_cb transform_path_cb;
 	srpo_uci_transform_data_cb transform_sysrepo_data_cb;
 	srpo_uci_transform_data_cb transform_uci_data_cb;
 	bool has_transform_sysrepo_data_private;
@@ -63,10 +70,10 @@ int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_l
 
 int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath);
 int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath);
-int srpo_uci_sublist_ucipath_to_xpath_convert(const char *ucipath, const char *xpath_parent_template, const char *ucipath_parent_template, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath);
 
 char *srpo_uci_section_name_get(const char *ucipath);
 
+int srpo_uci_path_get(const char *target, const char *from_template, const char *to_template, srpo_uci_transform_path_cb transform_path_cb, srpo_uci_path_direction_t direction, char **path);
 int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb);
 int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb);
 int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, const char **uci_section_type);
