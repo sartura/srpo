@@ -14,7 +14,6 @@
 #endif
 
 static char *path_from_template_get(const char *template, const char *data);
-static char *xpath_key_value_get(const char *xpath);
 static int uci_element_set(char *uci_data, bool is_uci_list);
 static int uci_element_delete(char *uci_data, bool is_uci_list);
 
@@ -249,7 +248,7 @@ int srpo_uci_path_get(const char *target, const char *from_template, const char 
 	if (direction == SRPO_UCI_PATH_DIRECTION_XPATH) {
 		path_key_value = srpo_uci_section_name_get(target);
 	} else if (direction == SRPO_UCI_PATH_DIRECTION_UCI) {
-		path_key_value = xpath_key_value_get(target);
+		path_key_value = srpo_uci_xpath_key_value_get(target, 1);
 	}
 
 	path_tmp = path_from_template_get(from_template, path_key_value);
@@ -454,29 +453,6 @@ static char *path_from_template_get(const char *template, const char *data)
 	return path;
 }
 
-static char *xpath_key_value_get(const char *xpath)
-{
-	sr_xpath_ctx_t sr_xpath_ctx = {0};
-	char *xpath_node = NULL;
-	char *xpath_key_name = NULL;
-	char *xpath_key_value = NULL;
-
-	xpath_node = sr_xpath_next_node((char *) xpath, &sr_xpath_ctx);
-	if (xpath_node) {
-		do {
-			xpath_key_name = sr_xpath_next_key_name(NULL, &sr_xpath_ctx);
-			if (xpath_key_name) {
-				xpath_key_value = strdup(sr_xpath_next_key_value(NULL, &sr_xpath_ctx));
-				break;
-			}
-		} while (sr_xpath_next_node(NULL, &sr_xpath_ctx));
-	}
-
-	sr_xpath_recover(&sr_xpath_ctx);
-
-	return xpath_key_value;
-}
-
 char *srpo_uci_section_name_get(const char *ucipath)
 {
 	int error = 0;
@@ -495,6 +471,34 @@ out:
 	FREE_SAFE(uci_data);
 
 	return value_tmp;
+}
+
+char *srpo_uci_xpath_key_value_get(const char *xpath, int level)
+{
+	sr_xpath_ctx_t sr_xpath_ctx = {0};
+	int xpath_level = 0;
+	char *xpath_node = NULL;
+	char *xpath_key_name = NULL;
+	char *xpath_key_value = NULL;
+
+	xpath_node = sr_xpath_next_node((char *) xpath, &sr_xpath_ctx);
+	if (xpath_node) {
+		do {
+			xpath_key_name = sr_xpath_next_key_name(NULL, &sr_xpath_ctx);
+			if (xpath_key_name) {
+				xpath_level++;
+
+				if (xpath_level >= level) {
+					xpath_key_value = strdup(sr_xpath_next_key_value(NULL, &sr_xpath_ctx));
+					break;
+				}
+			}
+		} while (sr_xpath_next_node(NULL, &sr_xpath_ctx));
+	}
+
+	sr_xpath_recover(&sr_xpath_ctx);
+
+	return xpath_key_value;
 }
 
 int srpo_uci_section_create(const char *ucipath, const char *uci_section_type)

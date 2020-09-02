@@ -110,6 +110,7 @@ The API consinst of the following elements:
   * `int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)`
   * `int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)`
   * `char *srpo_uci_section_name_get(const char *ucipath)`
+  * `char *srpo_uci_xpath_key_value_get(const char *xpath, int level)`
   * `int srpo_uci_path_get(const char *target, const char *from_template, const char *to_template, srpo_uci_transform_path_cb transform_path_cb, srpo_uci_path_direction_t direction, char **path)`
   * `int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)`
   * `int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)`
@@ -316,6 +317,23 @@ Function arguments:
 Function return:
 * function returns a string with the UCI section name exstracted from the UCI path
 * if the UCI path doesnt contain a section name NULL is returned
+* allocated dynamically user needs to call free
+
+## char *srpo_uci_xpath_key_value_get(const char *xpath, int level)
+
+Function for returning the key value from an XPath expression.
+
+Function arguments:
+* xpath:
+  * constant string containing the XPath expression
+  * can not be NULL
+* level:
+  * integer selecting at what depth the key value should be returned
+  * can not be NULL
+
+Function return:
+* function returns a string with the XPath key value at the required depth
+* if the XPath doesnt contain a key NULL is returned
 * allocated dynamically user needs to call free
 
 ## int srpo_uci_path_get(const char *target, const char *from_template, const char *to_template, srpo_uci_transform_path_cb transform_path_cb, srpo_uci_path_direction_t direction, char **path)
