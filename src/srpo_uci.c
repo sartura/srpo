@@ -210,6 +210,66 @@ out:
 	return error;
 }
 
+int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)
+{
+	char *ucipath_tmp = NULL;
+	int error = SR_ERR_OK;
+
+	if (xpath == NULL || ucipath == NULL || xpath_uci_template_map == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	*ucipath = NULL;
+
+	// find the table entry that matches the xpath for the found xpath list key
+	for (size_t i = 0; i < xpath_uci_template_map_size; i++) {
+		error = srpo_uci_path_get(xpath,
+								  xpath_uci_template_map[i].xpath_template, xpath_uci_template_map[i].ucipath_template,
+								  xpath_uci_template_map[i].transform_path_cb, SRPO_UCI_PATH_DIRECTION_UCI, &ucipath_tmp);
+		if (error == SRPO_UCI_ERR_NOT_FOUND) {
+			continue;
+		} else if (error == SR_ERR_OK) {
+			break;
+		} else {
+			return SRPO_UCI_ERR_ARGUMENT;
+		}
+	}
+
+	*ucipath = ucipath_tmp;
+
+	return *ucipath ? SRPO_UCI_ERR_OK : SRPO_UCI_ERR_NOT_FOUND;
+}
+
+int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)
+{
+	char *xpath_tmp = NULL;
+	int error = SR_ERR_OK;
+
+	if (ucipath == NULL || xpath == NULL || uci_xpath_template_map == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	*xpath = xpath_tmp;
+
+	// find the table entry that matches the uci path for the found uci section
+	for (size_t i = 0; i < uci_xpath_template_map_size; i++) {
+		error = srpo_uci_path_get(ucipath,
+								  uci_xpath_template_map[i].ucipath_template, uci_xpath_template_map[i].xpath_template,
+								  uci_xpath_template_map[i].transform_path_cb, SRPO_UCI_PATH_DIRECTION_XPATH, &xpath_tmp);
+		if (error == SRPO_UCI_ERR_NOT_FOUND) {
+			continue;
+		} else if (error == SR_ERR_OK) {
+			break;
+		} else {
+			return SRPO_UCI_ERR_ARGUMENT;
+		}
+	}
+
+	*xpath = xpath_tmp;
+
+	return *xpath ? SRPO_UCI_ERR_OK : SRPO_UCI_ERR_NOT_FOUND;
+}
+
 static char *path_from_template_get(const char *template, const char *data)
 {
 	char *path = NULL;
