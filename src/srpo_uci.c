@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <uci.h>
 #include <libuci2.h>
 #include <sysrepo/xpath.h>
 
