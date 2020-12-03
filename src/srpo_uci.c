@@ -34,7 +34,7 @@ struct srpo_uci_path {
 	char *value;
 };
 
-static struct uci_context *uci_context;
+static srpo_uci_ctx_t *uci_context = NULL;
 
 // helper functions
 static char *path_from_template_get(const char *template, const char *data);
@@ -54,6 +54,68 @@ static int uci_context_create_config_path(srpo_uci_ctx_t *ctx, const char *confi
 static int uci_context_revert(srpo_uci_ctx_t *ctx, const char *config);
 static int uci_context_commit(srpo_uci_ctx_t *ctx, const char *config);
 static void uci_context_free(srpo_uci_ctx_t *ctx);
+
+int srpo_uci_init(void)
+{
+	int error = SRPO_UCI_ERR_OK;
+
+	uci_context = uci_context_alloc();
+	if (uci_context == NULL) {
+		error = SRPO_UCI_ERR_UCI;
+		goto error_out;
+	}
+
+	uci_context_set_config_dir(uci_context, SRPO_UCI_CONFIG_DIR);
+	goto out;
+
+error_out:
+	srpo_uci_cleanup();
+
+out:
+
+	return error;
+}
+
+void srpo_uci_cleanup(void)
+{
+	if (uci_context) {
+		uci_context_free(uci_context);
+		uci_context = NULL;
+	}
+}
+
+const char *srpo_uci_error_description_get(srpo_uci_error_e error)
+{
+	switch (error) {
+#define XM(ENUM, CODE, DESCRIPTION) \
+	case ENUM:                      \
+		return DESCRIPTION;
+
+		SRPO_UCI_ERROR_TABLE
+#undef XM
+
+		default:
+			return "unknown error code";
+	}
+}
+
+static char *path_from_template_get(const char *template, const char *data)
+{
+	char *path = NULL;
+	size_t path_size = 0;
+
+	if (strstr(template, "%s")) {
+		path_size = strlen(template) - 2 + (data ? strlen(data) : 0) + 1;
+		path = xmalloc(path_size);
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+		snprintf(path, path_size, template, data ? data : "");
+#pragma GCC diagnostic warning "-Wformat-nonliteral"
+	} else {
+		path = xstrdup(template);
+	}
+
+	return path;
+}
 
 static uci2_n_t *uci_get_last_type(uci2_n_t *cfg, const char *type_name)
 {
