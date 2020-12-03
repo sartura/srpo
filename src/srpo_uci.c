@@ -99,6 +99,117 @@ const char *srpo_uci_error_description_get(srpo_uci_error_e error)
 	}
 }
 
+int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size, bool convert_to_extended)
+{
+	int error = 0;
+	char path_buffer[PATH_MAX] = {0};
+	char sec_buffer[256] = {0};
+	char list_items_buffer[256] = {0};
+	uci2_n_t *node_sec = NULL;
+	uci2_n_t *node_type = NULL;
+	bool anonym_sec = false;
+
+	struct {
+		char **list;
+		size_t size;
+	} path_list = {NULL, 0};
+
+	error = uci_context_load(uci_context, uci_config);
+
+	if (error != SRPO_UCI_ERR_OK) {
+		return error;
+	} else {
+		uci2_n_t *root = UCI2_CFG_ROOT(uci_context->parser_ctx);
+		for (size_t iter = 0; iter < uci_section_list_size; iter++) {
+			node_sec = NULL;
+			node_type = NULL;
+			anonym_sec = false;
+
+			for (int i = 0; i < root->ch_nr; i++) {
+				uci2_n_t *type = root->ch[i];
+
+				if (UCI2_IS_ANYNYMOUS_SECTION(type) && convert_to_extended) {
+					if (strcmp(type->name, uci_section_list[iter]) == 0) {
+						node_sec = type;
+						node_type = type;
+						anonym_sec = true;
+						break;
+					}
+				} else {
+					// if not, iterate through sections and if name found set the tmp variable to it
+					for (int j = 0; j < type->ch_nr; j++) {
+						uci2_n_t *sec = type->ch[j];
+						if (strcmp(sec->name, uci_section_list[iter]) == 0) {
+							node_sec = sec;
+							node_type = type;
+							break;
+						}
+					}
+				}
+
+				if (node_sec != NULL) {
+					// node found => break
+					break;
+				}
+			}
+
+			if (node_sec == NULL) {
+				// wanted node not found -> error
+				goto error_out;
+			}
+
+			if (anonym_sec) {
+				snprintf(sec_buffer, sizeof(sec_buffer), "@%s[%d]", uci2_get_name(node_sec), node_sec->id - 1);
+			} else {
+				snprintf(sec_buffer, sizeof(sec_buffer), "%s", uci2_get_name(node_sec));
+			}
+			// write path in the list
+			snprintf(path_buffer, sizeof(path_buffer), "%s.%s=%s", uci_config, sec_buffer, uci2_get_name(node_type));
+			path_list.list = xrealloc(path_list.list, sizeof(char *) * (++path_list.size));
+			path_list.list[path_list.size - 1] = xstrdup(path_buffer);
+
+			// iterate options and lists and write them to the path
+			for (int i = 0; i < node_sec->ch_nr; i++) {
+				uci2_n_t *child = node_sec->ch[i];
+				path_list.list = xrealloc(path_list.list, sizeof(char *) * (++path_list.size));
+				if (child->nt == UCI2_NT_LIST) {
+					// if its not an option -> list
+					size_t byte_cnt = 0;
+					for (int j = 0; j < child->ch_nr; j++) {
+						uci2_n_t *li = child->ch[j];
+						if (sizeof(list_items_buffer) - byte_cnt > 0) {
+							snprintf(list_items_buffer + byte_cnt, sizeof(list_items_buffer) - byte_cnt, "\'%s\' ", uci2_get_name(li));
+							byte_cnt += strlen(li->name);
+						} else {
+							// err
+							error = SRPO_UCI_ERR_UCI;
+							break;
+						}
+					}
+					// remove last space
+					list_items_buffer[byte_cnt - 2] = 0;
+				}
+				snprintf(path_buffer, sizeof(path_buffer), "%s.%s.%s=%s", uci_config, sec_buffer, uci2_get_name(child), child->nt == UCI2_NT_LIST ? list_items_buffer : uci2_get_value(child));
+				path_list.list[path_list.size - 1] = xstrdup(path_buffer);
+			}
+		}
+	}
+	goto out;
+error_out:
+	if (path_list.list) {
+		for (size_t i = 0; i < path_list.size; i++) {
+			free(path_list.list[i]);
+		}
+		free(path_list.list);
+		path_list.list = NULL;
+		path_list.size = 0;
+	}
+out:
+	*ucipath_list = path_list.list;
+	*ucipath_list_size = path_list.size;
+	return error;
+}
+
 static char *path_from_template_get(const char *template, const char *data)
 {
 	char *path = NULL;
