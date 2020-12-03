@@ -842,6 +842,48 @@ out:
 	return error;
 }
 
+int srpo_uci_revert(const char *uci_config)
+{
+	int error = SRPO_UCI_ERR_OK;
+	char *uci_config_tmp = NULL;
+
+	if (uci_config == NULL) {
+		error = SRPO_UCI_ERR_UCI;
+		goto out;
+	}
+
+	error = uci_context_revert(uci_context, uci_config);
+	if (error) {
+		error = SRPO_UCI_ERR_UCI;
+		goto out;
+	}
+
+out:
+	FREE_SAFE(uci_config_tmp);
+	return error;
+}
+
+int srpo_uci_commit(const char *uci_config)
+{
+	int error = SRPO_UCI_ERR_OK;
+	char *uci_config_tmp = NULL;
+
+	if (uci_config == NULL) {
+		error = SRPO_UCI_ERR_UCI;
+		goto out;
+	}
+
+	error = uci_context_commit(uci_context, uci_config);
+	if (error) {
+		error = SRPO_UCI_ERR_UCI;
+		goto out;
+	}
+
+out:
+	FREE_SAFE(uci_config_tmp);
+	return error;
+}
+
 static char *path_from_template_get(const char *template, const char *data)
 {
 	char *path = NULL;
