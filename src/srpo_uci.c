@@ -478,6 +478,61 @@ int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xp
 	return SRPO_UCI_ERR_OK;
 }
 
+char *srpo_uci_section_name_get(const char *ucipath)
+{
+	int error = 0;
+	srpo_uci_path_t uci_path;
+	char *value_tmp = NULL;
+
+	uci_path_init(&uci_path);
+
+	error = uci_path_parse(&uci_path, ucipath);
+
+	if (error)
+		goto out;
+
+	// check for empty section
+	if (!uci_path.section) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	value_tmp = xstrdup(uci_path.section);
+	uci_path_print(&uci_path);
+
+out:
+	uci_path_free(&uci_path);
+	return value_tmp;
+}
+
+char *srpo_uci_xpath_key_value_get(const char *xpath, int level)
+{
+	sr_xpath_ctx_t sr_xpath_ctx = {0};
+	int xpath_level = 0;
+	char *xpath_node = NULL;
+	char *xpath_key_name = NULL;
+	char *xpath_key_value = NULL;
+
+	xpath_node = sr_xpath_next_node((char *) xpath, &sr_xpath_ctx);
+	if (xpath_node) {
+		do {
+			xpath_key_name = sr_xpath_next_key_name(NULL, &sr_xpath_ctx);
+			if (xpath_key_name) {
+				xpath_level++;
+
+				if (xpath_level >= level) {
+					xpath_key_value = strdup(sr_xpath_next_key_value(NULL, &sr_xpath_ctx));
+					break;
+				}
+			}
+		} while (sr_xpath_next_node(NULL, &sr_xpath_ctx));
+	}
+
+	sr_xpath_recover(&sr_xpath_ctx);
+
+	return xpath_key_value;
+}
+
 static char *path_from_template_get(const char *template, const char *data)
 {
 	char *path = NULL;
@@ -528,6 +583,7 @@ static void uci_path_print(srpo_uci_path_t *ptr)
 	if (ptr->value)
 		printf("ptr->value = %s\n", ptr->value);
 }
+
 static int uci_path_parse(srpo_uci_path_t *path, const char *uci_path)
 {
 	int error = 0;
