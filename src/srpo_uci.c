@@ -533,6 +533,252 @@ char *srpo_uci_xpath_key_value_get(const char *xpath, int level)
 	return xpath_key_value;
 }
 
+int srpo_uci_section_create(const char *ucipath, const char *uci_section_type)
+{
+	int error = SRPO_UCI_ERR_OK;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *last_type = NULL;
+
+	uci_path_init(&uci_path);
+
+	if (ucipath == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	if (uci_section_type == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	error = uci_path_parse(&uci_path, ucipath);
+
+	last_type = uci_get_last_type(UCI2_CFG_ROOT(uci_context->parser_ctx), uci_section_type);
+
+	if (!last_type) {
+		error = SRPO_UCI_ERR_UCI;
+		goto out;
+	}
+
+	uci2_add_S(uci_context->parser_ctx, last_type, uci_path.section);
+
+out:
+	uci_path_free(&uci_path);
+	return error;
+}
+
+int srpo_uci_section_delete(const char *ucipath)
+{
+	int error = SRPO_UCI_ERR_OK;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *lookup_node = NULL;
+
+	uci_path_init(&uci_path);
+
+	if (ucipath == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	error = uci_path_parse(&uci_path, ucipath);
+
+	if (error) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	if (!uci_path.section || !uci_path.package) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section);
+
+	if (!lookup_node) {
+		// no such node found
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_del(lookup_node);
+out:
+	uci_path_free(&uci_path);
+	return error;
+}
+
+int srpo_uci_option_set(const char *ucipath, const char *value, srpo_uci_transform_data_cb transform_sysrepo_data_cb, void *private_data)
+{
+	int error = SRPO_UCI_ERR_OK;
+	char *transform_value = NULL;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *lookup_node = NULL;
+
+	uci_path_init(&uci_path);
+
+	if (ucipath == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	if (value == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	transform_value = transform_sysrepo_data_cb ? transform_sysrepo_data_cb(value, private_data) : xstrdup(value);
+	if (transform_value == NULL) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	uci_path_parse(&uci_path, ucipath);
+	if (!uci_path.package || !uci_path.section || !uci_path.option) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+
+	if (!lookup_node) {
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_change_value(lookup_node, transform_value);
+
+out:
+	uci_path_free(&uci_path);
+	FREE_SAFE(transform_value);
+
+	return error;
+}
+
+int srpo_uci_option_remove(const char *ucipath)
+{
+	int error = 0;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *lookup_node = NULL;
+
+	uci_path_init(&uci_path);
+
+	if (ucipath == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	error = uci_path_parse(&uci_path, ucipath);
+
+	if (error) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	if (!uci_path.package || !uci_path.section || !uci_path.option) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+
+	if (!lookup_node) {
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_del(lookup_node);
+
+out:
+	uci_path_free(&uci_path);
+
+	return error;
+}
+
+int srpo_uci_list_set(const char *ucipath, const char *value, srpo_uci_transform_data_cb transform_sysrepo_data_cb, void *private_data)
+{
+	int error = SRPO_UCI_ERR_OK;
+	char *transform_value = NULL;
+	uci2_n_t *lookup_node = NULL;
+	srpo_uci_path_t uci_path;
+
+	uci_path_init(&uci_path);
+
+	if (ucipath == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	if (value == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	transform_value = transform_sysrepo_data_cb ? transform_sysrepo_data_cb(value, private_data) : xstrdup(value);
+	if (transform_value == NULL) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	error = uci_path_parse(&uci_path, ucipath);
+	if (error) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	if (!uci_path.package || !uci_path.section || !uci_path.option) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+
+	if (!lookup_node) {
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_add_I(uci_context->parser_ctx, lookup_node, transform_value);
+
+out:
+	uci_path_free(&uci_path);
+	FREE_SAFE(transform_value);
+
+	return error;
+}
+
+int srpo_uci_list_remove(const char *ucipath, const char *value)
+{
+	int error = SRPO_UCI_ERR_OK;
+	uci2_n_t *lookup_node = NULL;
+	srpo_uci_path_t uci_path;
+
+	uci_path_init(&uci_path);
+
+	if (ucipath == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	if (value == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	error = uci_path_parse(&uci_path, ucipath);
+	if (error) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	if (!uci_path.package || !uci_path.section || !uci_path.option) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option, value);
+
+	if (!lookup_node) {
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_del(lookup_node);
+
+out:
+	uci_path_free(&uci_path);
+
+	return error;
+}
+
 static char *path_from_template_get(const char *template, const char *data)
 {
 	char *path = NULL;
