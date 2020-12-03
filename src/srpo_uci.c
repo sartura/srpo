@@ -779,6 +779,69 @@ out:
 	return error;
 }
 
+int srpo_uci_element_value_get(const char *ucipath, srpo_uci_transform_data_cb transform_uci_data_cb, void *private_data, char ***value_list, size_t *value_list_size)
+{
+	int error = 0;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *tmp_node = NULL;
+	struct {
+		char **list;
+		size_t size;
+	} val_list = {0, 0};
+
+	*value_list = NULL;
+	*value_list_size = 0;
+
+	uci_path_init(&uci_path);
+
+	if (ucipath == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	error = uci_path_parse(&uci_path, ucipath);
+
+	if (error) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	// there needs to be an options which is wanted -> no option == noting to return
+	if (uci_path.package && uci_path.section && uci_path.option) {
+		tmp_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+
+		if (!tmp_node) {
+			error = SRPO_UCI_ERR_NOT_FOUND;
+			goto out;
+		}
+
+		if (tmp_node->nt == UCI2_NT_LIST) {
+			// gather all values
+			uci2_iter(tmp_node, li)
+			{
+				val_list.list = xrealloc(val_list.list, sizeof(char *) * (++val_list.size));
+				val_list.list[val_list.size - 1] = transform_uci_data_cb ? transform_uci_data_cb(li->name, private_data) : xstrdup(li->name);
+			}
+		} else if (tmp_node->nt == UCI2_NT_OPTION) {
+			// gather one value
+			val_list.list = xrealloc(val_list.list, sizeof(char *) * (++val_list.size));
+			val_list.list[val_list.size - 1] = transform_uci_data_cb ? transform_uci_data_cb(tmp_node->value, private_data) : xstrdup(tmp_node->value);
+		} else {
+			// some internal libuci2 error
+			error = SRPO_UCI_ERR_UCI;
+			goto out;
+		}
+	} else {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	*value_list = val_list.list;
+	*value_list_size = val_list.size;
+out:
+	uci_path_free(&uci_path);
+	return error;
+}
+
 static char *path_from_template_get(const char *template, const char *data)
 {
 	char *path = NULL;
