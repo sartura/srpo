@@ -270,6 +270,214 @@ int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_te
 	return *xpath ? SRPO_UCI_ERR_OK : SRPO_UCI_ERR_NOT_FOUND;
 }
 
+int srpo_uci_path_get(const char *target, const char *from_template, const char *to_template, srpo_uci_transform_path_cb transform_path_cb, srpo_uci_path_direction_t direction, char **path)
+{
+	int error = SRPO_UCI_ERR_ARGUMENT;
+	char *path_key_value = NULL;
+	char *path_tmp = NULL;
+
+	if (from_template == NULL || to_template == NULL) {
+		goto cleanup;
+	}
+
+	/* redirect to custom path handler */
+	if (transform_path_cb) {
+		error = transform_path_cb(target, from_template, to_template, direction, path);
+		goto cleanup;
+	}
+
+	/* assume simple path constructor */
+	if (direction == SRPO_UCI_PATH_DIRECTION_XPATH) {
+		path_key_value = srpo_uci_section_name_get(target);
+	} else if (direction == SRPO_UCI_PATH_DIRECTION_UCI) {
+		path_key_value = srpo_uci_xpath_key_value_get(target, 1);
+	}
+
+	path_tmp = path_from_template_get(from_template, path_key_value);
+	if (strcmp(target, path_tmp) == 0) {
+		*path = path_from_template_get(to_template, path_key_value);
+
+		error = SRPO_UCI_ERR_OK;
+		goto cleanup;
+	}
+
+	error = SRPO_UCI_ERR_NOT_FOUND;
+
+cleanup:
+	FREE_SAFE(path_tmp);
+	FREE_SAFE(path_key_value);
+
+	return error;
+}
+
+int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)
+{
+	int error = SRPO_UCI_ERR_OK;
+	srpo_uci_transform_data_cb transform_sysrepo_data_cb_tmp = NULL;
+	char *ucipath_tmp = NULL;
+
+	if (xpath == NULL || xpath_uci_template_map == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	// find the table entry that matches the xpath for the found xpath list key
+	for (size_t i = 0; i < xpath_uci_template_map_size; i++) {
+		error = srpo_uci_path_get(xpath,
+								  xpath_uci_template_map[i].xpath_template, xpath_uci_template_map[i].ucipath_template,
+								  xpath_uci_template_map[i].transform_path_cb, SRPO_UCI_PATH_DIRECTION_UCI, &ucipath_tmp);
+		if (error == SRPO_UCI_ERR_NOT_FOUND) {
+			FREE_SAFE(ucipath_tmp);
+			continue;
+		} else if (error == SRPO_UCI_ERR_OK) {
+			transform_sysrepo_data_cb_tmp = xpath_uci_template_map[i].transform_sysrepo_data_cb;
+			break;
+		} else {
+			FREE_SAFE(ucipath_tmp);
+			return SRPO_UCI_ERR_ARGUMENT;
+		}
+	}
+
+	*transform_sysrepo_data_cb = transform_sysrepo_data_cb_tmp;
+
+	FREE_SAFE(ucipath_tmp);
+
+	return SRPO_UCI_ERR_OK;
+}
+
+int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)
+{
+	int error = SRPO_UCI_ERR_OK;
+	srpo_uci_transform_data_cb transform_uci_data_cb_tmp = NULL;
+	char *xpath_tmp = NULL;
+
+	if (ucipath == NULL || uci_xpath_template_map == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	// find the table entry that matches the uci path for the found uci section
+	for (size_t i = 0; i < uci_xpath_template_map_size; i++) {
+		error = srpo_uci_path_get(ucipath,
+								  uci_xpath_template_map[i].ucipath_template, uci_xpath_template_map[i].xpath_template,
+								  uci_xpath_template_map[i].transform_path_cb, SRPO_UCI_PATH_DIRECTION_XPATH, &xpath_tmp);
+		if (error == SRPO_UCI_ERR_NOT_FOUND) {
+			FREE_SAFE(xpath_tmp);
+			continue;
+		} else if (error == SR_ERR_OK) {
+			transform_uci_data_cb_tmp = uci_xpath_template_map[i].transform_uci_data_cb;
+			break;
+		} else {
+			FREE_SAFE(xpath_tmp);
+			return SRPO_UCI_ERR_ARGUMENT;
+		}
+	}
+
+	*transform_uci_data_cb = transform_uci_data_cb_tmp;
+
+	FREE_SAFE(xpath_tmp);
+
+	return SRPO_UCI_ERR_OK;
+}
+
+int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, const char **uci_section_type)
+{
+	int error = SRPO_UCI_ERR_OK;
+	const char *uci_section_type_tmp = NULL;
+	char *xpath_tmp = NULL;
+
+	if (ucipath == NULL || uci_xpath_template_map == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	// find the table entry that matches the uci path for the found uci section
+	for (size_t i = 0; i < uci_xpath_template_map_size; i++) {
+		error = srpo_uci_path_get(ucipath,
+								  uci_xpath_template_map[i].ucipath_template, uci_xpath_template_map[i].xpath_template,
+								  uci_xpath_template_map[i].transform_path_cb, SRPO_UCI_PATH_DIRECTION_XPATH, &xpath_tmp);
+		if (error == SRPO_UCI_ERR_NOT_FOUND) {
+			continue;
+		} else if (error == SR_ERR_OK) {
+			uci_section_type_tmp = uci_xpath_template_map[i].uci_section_type;
+			break;
+		} else {
+			return SRPO_UCI_ERR_ARGUMENT;
+		}
+	}
+
+	*uci_section_type = uci_section_type_tmp;
+
+	FREE_SAFE(xpath_tmp);
+
+	return SRPO_UCI_ERR_OK;
+}
+
+int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool *has_transform_sysrepo_data_private)
+{
+	int error = SRPO_UCI_ERR_OK;
+	bool has_transform_sysrepo_data_private_tmp = false;
+	char *ucipath_tmp = NULL;
+
+	if (xpath == NULL || xpath_uci_template_map == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	// find the table entry that matches the xpath for the found xpath list key
+	for (size_t i = 0; i < xpath_uci_template_map_size; i++) {
+		error = srpo_uci_path_get(xpath,
+								  xpath_uci_template_map[i].xpath_template, xpath_uci_template_map[i].ucipath_template,
+								  xpath_uci_template_map[i].transform_path_cb, SRPO_UCI_PATH_DIRECTION_UCI, &ucipath_tmp);
+		if (error == SRPO_UCI_ERR_NOT_FOUND) {
+			FREE_SAFE(ucipath_tmp);
+			continue;
+		} else if (error == SRPO_UCI_ERR_OK) {
+			has_transform_sysrepo_data_private_tmp = xpath_uci_template_map[i].has_transform_sysrepo_data_private;
+			break;
+		} else {
+			FREE_SAFE(ucipath_tmp);
+			return SRPO_UCI_ERR_ARGUMENT;
+		}
+	}
+
+	*has_transform_sysrepo_data_private = has_transform_sysrepo_data_private_tmp;
+
+	FREE_SAFE(ucipath_tmp);
+
+	return SRPO_UCI_ERR_OK;
+}
+
+int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool *has_transform_uci_data_private)
+{
+	int error = SRPO_UCI_ERR_OK;
+	bool has_transform_uci_data_private_tmp = false;
+	char *xpath_tmp = NULL;
+
+	if (ucipath == NULL || uci_xpath_template_map == NULL) {
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	// find the table entry that matches the uci path for the found uci section
+	for (size_t i = 0; i < uci_xpath_template_map_size; i++) {
+		error = srpo_uci_path_get(ucipath,
+								  uci_xpath_template_map[i].ucipath_template, uci_xpath_template_map[i].xpath_template,
+								  uci_xpath_template_map[i].transform_path_cb, SRPO_UCI_PATH_DIRECTION_XPATH, &xpath_tmp);
+		if (error == SRPO_UCI_ERR_NOT_FOUND) {
+			FREE_SAFE(xpath_tmp);
+			continue;
+		} else if (error == SR_ERR_OK) {
+			has_transform_uci_data_private_tmp = uci_xpath_template_map[i].has_transform_uci_data_private;
+			break;
+		} else {
+			FREE_SAFE(xpath_tmp);
+			return SRPO_UCI_ERR_ARGUMENT;
+		}
+	}
+
+	*has_transform_uci_data_private = has_transform_uci_data_private_tmp;
+
+	FREE_SAFE(xpath_tmp);
+
+	return SRPO_UCI_ERR_OK;
+}
+
 static char *path_from_template_get(const char *template, const char *data)
 {
 	char *path = NULL;
