@@ -180,7 +180,7 @@ Function return:
 ## srpo_uci_xpath_uci_template_map_t
 
 Structure for holding Sysrepo to UCI mapping. The mappings are organized in the following order
-* libyang list mapts to UCI section
+* libyang list maps to UCI section
 * libyang leaflist maps to UCI list
 * libyang leaf maps to UCI option
 
