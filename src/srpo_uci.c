@@ -238,9 +238,12 @@ int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_temp
 		} else if (error == SR_ERR_OK) {
 			srpo_path_list_append(&ucipath_ls, ucipath_tmp);
 		} else {
+			error = SRPO_UCI_ERR_ARGUMENT;
 			goto error_out;
 		}
 	}
+
+	error = SRPO_UCI_ERR_OK;
 	goto out;
 
 error_out:
@@ -250,7 +253,7 @@ out:
 	*ucipath_list = ucipath_ls.data;
 	*ucipath_list_size = ucipath_ls.size;
 
-	return *ucipath_list ? SRPO_UCI_ERR_OK : SRPO_UCI_ERR_NOT_FOUND;
+	return error;
 }
 
 int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char ***xpath_list, size_t *xpath_list_size)
@@ -275,14 +278,21 @@ int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_te
 		} else if (error == SR_ERR_OK) {
 			srpo_path_list_append(&xpath_ls, xpath_tmp);
 		} else {
-			return SRPO_UCI_ERR_ARGUMENT;
+			error = SRPO_UCI_ERR_ARGUMENT;
+			goto error_out;
 		}
 	}
 
+	error = SRPO_UCI_ERR_OK;
+	goto out;
+
+error_out:
+	srpo_path_list_free(&xpath_ls);
+out:
 	*xpath_list = xpath_ls.data;
 	*xpath_list_size = xpath_ls.size;
 
-	return *xpath_list ? SRPO_UCI_ERR_OK : SRPO_UCI_ERR_NOT_FOUND;
+	return error;
 }
 
 int srpo_uci_path_get(const char *target, const char *from_template, const char *to_template, srpo_uci_transform_path_cb transform_path_cb, srpo_uci_path_direction_t direction, char **path)
@@ -325,13 +335,18 @@ cleanup:
 	return error;
 }
 
-int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)
+int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb **transform_sysrepo_data_cb_list, size_t *transform_sysrepo_data_cb_list_size)
 {
 	int error = SRPO_UCI_ERR_OK;
-	srpo_uci_transform_data_cb transform_sysrepo_data_cb_tmp = NULL;
 	char *ucipath_tmp = NULL;
 
-	if (xpath == NULL || xpath_uci_template_map == NULL) {
+	// list of callbacks for a specific path conversion
+	struct {
+		srpo_uci_transform_data_cb *data;
+		size_t size;
+	} cb_list = {0};
+
+	if (xpath == NULL || xpath_uci_template_map == NULL || transform_sysrepo_data_cb_list == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
@@ -344,28 +359,41 @@ int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci
 			FREE_SAFE(ucipath_tmp);
 			continue;
 		} else if (error == SRPO_UCI_ERR_OK) {
-			transform_sysrepo_data_cb_tmp = xpath_uci_template_map[i].transform_sysrepo_data_cb;
-			break;
-		} else {
+			cb_list.data = xrealloc(cb_list.data, sizeof(srpo_uci_transform_data_cb) * (++cb_list.size));
+			cb_list.data[cb_list.size - 1] = xpath_uci_template_map[i].transform_sysrepo_data_cb;
 			FREE_SAFE(ucipath_tmp);
-			return SRPO_UCI_ERR_ARGUMENT;
+		} else {
+			error = SRPO_UCI_ERR_ARGUMENT;
+			FREE_SAFE(ucipath_tmp);
+			goto error_out;
 		}
 	}
 
-	*transform_sysrepo_data_cb = transform_sysrepo_data_cb_tmp;
+	goto out;
 
-	FREE_SAFE(ucipath_tmp);
+error_out:
+	// free allocated list if an error occured
+	FREE_SAFE(cb_list.data);
+	cb_list.size = 0;
+out:
+	*transform_sysrepo_data_cb_list = cb_list.data;
+	*transform_sysrepo_data_cb_list_size = cb_list.size;
 
-	return SRPO_UCI_ERR_OK;
+	return error;
 }
 
-int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)
+int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb **transform_uci_data_cb_list, size_t *transform_uci_data_cb_list_size)
 {
 	int error = SRPO_UCI_ERR_OK;
-	srpo_uci_transform_data_cb transform_uci_data_cb_tmp = NULL;
 	char *xpath_tmp = NULL;
 
-	if (ucipath == NULL || uci_xpath_template_map == NULL) {
+	// list of callbacks for a specific path conversion
+	struct {
+		srpo_uci_transform_data_cb *data;
+		size_t size;
+	} cb_list = {0};
+
+	if (ucipath == NULL || uci_xpath_template_map == NULL || transform_uci_data_cb_list == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
@@ -378,28 +406,41 @@ int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_t
 			FREE_SAFE(xpath_tmp);
 			continue;
 		} else if (error == SR_ERR_OK) {
-			transform_uci_data_cb_tmp = uci_xpath_template_map[i].transform_uci_data_cb;
+			cb_list.data = xrealloc(cb_list.data, sizeof(srpo_uci_transform_data_cb) * (++cb_list.size));
+			cb_list.data[cb_list.size - 1] = uci_xpath_template_map[i].transform_uci_data_cb;
+			FREE_SAFE(xpath_tmp);
 			break;
 		} else {
+			error = SRPO_UCI_ERR_ARGUMENT;
 			FREE_SAFE(xpath_tmp);
-			return SRPO_UCI_ERR_ARGUMENT;
+			goto error_out;
 		}
 	}
 
-	*transform_uci_data_cb = transform_uci_data_cb_tmp;
+	goto out;
 
-	FREE_SAFE(xpath_tmp);
+error_out:
+	// free allocated list if an error occured
+	FREE_SAFE(cb_list.data);
+	cb_list.size = 0;
+out:
+	*transform_uci_data_cb_list = cb_list.data;
+	*transform_uci_data_cb_list_size = cb_list.size;
 
-	return SRPO_UCI_ERR_OK;
+	return error;
 }
 
-int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, const char **uci_section_type)
+int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, const char ***uci_section_type_list, size_t *uci_section_type_list_size)
 {
 	int error = SRPO_UCI_ERR_OK;
-	const char *uci_section_type_tmp = NULL;
 	char *xpath_tmp = NULL;
 
-	if (ucipath == NULL || uci_xpath_template_map == NULL) {
+	struct {
+		const char **data;
+		size_t size;
+	} sec_list = {0};
+
+	if (ucipath == NULL || uci_xpath_template_map == NULL || uci_section_type_list == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
@@ -409,29 +450,43 @@ int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_m
 								  uci_xpath_template_map[i].ucipath_template, uci_xpath_template_map[i].xpath_template,
 								  uci_xpath_template_map[i].transform_path_cb, SRPO_UCI_PATH_DIRECTION_XPATH, &xpath_tmp);
 		if (error == SRPO_UCI_ERR_NOT_FOUND) {
+			FREE_SAFE(xpath_tmp);
 			continue;
 		} else if (error == SR_ERR_OK) {
-			uci_section_type_tmp = uci_xpath_template_map[i].uci_section_type;
-			break;
+			sec_list.data = xrealloc(sec_list.data, sizeof(const char *) * (++sec_list.size));
+			sec_list.data[sec_list.size - 1] = uci_xpath_template_map[i].uci_section_type;
+			FREE_SAFE(xpath_tmp);
 		} else {
-			return SRPO_UCI_ERR_ARGUMENT;
+			error = SRPO_UCI_ERR_ARGUMENT;
+			FREE_SAFE(xpath_tmp);
+			goto error_out;
 		}
 	}
 
-	*uci_section_type = uci_section_type_tmp;
+	goto out;
 
-	FREE_SAFE(xpath_tmp);
+error_out:
+	FREE_SAFE(sec_list.data);
+	sec_list.size = 0;
 
-	return SRPO_UCI_ERR_OK;
+out:
+	*uci_section_type_list = sec_list.data;
+	*uci_section_type_list_size = sec_list.size;
+
+	return error;
 }
 
-int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool *has_transform_sysrepo_data_private)
+int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool **has_transform_sysrepo_data_private_list, size_t *has_transform_sysrepo_data_private_list_size)
 {
 	int error = SRPO_UCI_ERR_OK;
-	bool has_transform_sysrepo_data_private_tmp = false;
 	char *ucipath_tmp = NULL;
 
-	if (xpath == NULL || xpath_uci_template_map == NULL) {
+	struct {
+		bool *data;
+		size_t size;
+	} has_list = {0};
+
+	if (xpath == NULL || xpath_uci_template_map == NULL || has_transform_sysrepo_data_private_list == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
@@ -444,28 +499,39 @@ int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_
 			FREE_SAFE(ucipath_tmp);
 			continue;
 		} else if (error == SRPO_UCI_ERR_OK) {
-			has_transform_sysrepo_data_private_tmp = xpath_uci_template_map[i].has_transform_sysrepo_data_private;
-			break;
-		} else {
+			has_list.data = xrealloc(has_list.data, sizeof(bool) * (++has_list.size));
+			has_list.data[has_list.size - 1] = xpath_uci_template_map[i].has_transform_sysrepo_data_private;
 			FREE_SAFE(ucipath_tmp);
-			return SRPO_UCI_ERR_ARGUMENT;
+		} else {
+			error = SRPO_UCI_ERR_ARGUMENT;
+			FREE_SAFE(ucipath_tmp);
+			goto error_out;
 		}
 	}
 
-	*has_transform_sysrepo_data_private = has_transform_sysrepo_data_private_tmp;
+	goto out;
 
-	FREE_SAFE(ucipath_tmp);
+error_out:
+	FREE_SAFE(has_list.data);
+	has_list.size = 0;
+out:
+	*has_transform_sysrepo_data_private_list = has_list.data;
+	*has_transform_sysrepo_data_private_list_size = has_list.size;
 
-	return SRPO_UCI_ERR_OK;
+	return error;
 }
 
-int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool *has_transform_uci_data_private)
+int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool **has_transform_uci_data_private_list, size_t *has_transform_uci_data_private_list_size)
 {
 	int error = SRPO_UCI_ERR_OK;
-	bool has_transform_uci_data_private_tmp = false;
 	char *xpath_tmp = NULL;
 
-	if (ucipath == NULL || uci_xpath_template_map == NULL) {
+	struct {
+		bool *data;
+		size_t size;
+	} has_list = {0};
+
+	if (ucipath == NULL || uci_xpath_template_map == NULL || has_transform_uci_data_private_list == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
@@ -478,19 +544,26 @@ int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xp
 			FREE_SAFE(xpath_tmp);
 			continue;
 		} else if (error == SR_ERR_OK) {
-			has_transform_uci_data_private_tmp = uci_xpath_template_map[i].has_transform_uci_data_private;
-			break;
-		} else {
+			has_list.data = xrealloc(has_list.data, sizeof(bool) * (++has_list.size));
+			has_list.data[has_list.size - 1] = uci_xpath_template_map[i].has_transform_uci_data_private;
 			FREE_SAFE(xpath_tmp);
-			return SRPO_UCI_ERR_ARGUMENT;
+		} else {
+			error = SRPO_UCI_ERR_ARGUMENT;
+			FREE_SAFE(xpath_tmp);
+			goto error_out;
 		}
 	}
 
-	*has_transform_uci_data_private = has_transform_uci_data_private_tmp;
+	goto out;
 
-	FREE_SAFE(xpath_tmp);
+error_out:
+	FREE_SAFE(has_list.data);
+	has_list.size = 0;
+out:
+	*has_transform_uci_data_private_list = has_list.data;
+	*has_transform_uci_data_private_list_size = has_list.size;
 
-	return SRPO_UCI_ERR_OK;
+	return error;
 }
 
 char *srpo_uci_section_name_get(const char *ucipath)
@@ -1054,7 +1127,7 @@ static void srpo_path_list_free(srpo_path_list_t *ls)
 			FREE_SAFE(ls->data[i]);
 		}
 		FREE_SAFE(ls->data);
-		srpo_path_list_init(ls);
+		ls->size = 0;
 	}
 }
 
