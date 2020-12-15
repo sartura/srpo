@@ -35,7 +35,9 @@ typedef enum {
 	XM(SRPO_UCI_ERR_TABLE_ENTRY, -5, "Table doesn't contain a path template") \
 	XM(SRPO_UCI_ERR_SECTION_NAME, -6, "UCI section name is missing")          \
 	XM(SRPO_UCI_ERR_TRANSFORM_CB, -7, "Tranform data callback error")         \
-	XM(SRPO_UCI_ERR_UCI_FILE, -8, "Error opening uci config file")
+	XM(SRPO_UCI_ERR_UCI_FILE, -8, "Error opening uci config file")            \
+	XM(SRPO_UCI_ERR_DIRECTORY, -9, "Error opening uci packages directory")    \
+	XM(SRPO_UCI_ERR_FILE_PATH_SIZE, -10, "Invalid file name size")
 
 #define XM(ENUM, CODE, DESCRIPTION) ENUM = CODE,
 	SRPO_UCI_ERROR_TABLE

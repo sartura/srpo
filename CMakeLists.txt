@@ -22,21 +22,21 @@ set(SOURCES
 add_library(${PROJECT_NAME} MODULE ${SOURCES})
 
 find_package(SYSREPO REQUIRED)
-find_package(UCI REQUIRED)
+find_package(LIBUCI2 REQUIRED)
 find_package(LIBUBOX REQUIRED)
 find_package(LIBUBUS REQUIRED)
 
 target_link_libraries(
     ${PROJECT_NAME}
     ${SYSREPO_LIBRARIES}
-    ${UCI_LIBRARIES}
+    ${LIBUCI2_LIBRARIES}
     ${LIBUBOX_LIBRARIES}
     ${LIBUBUS_LIBRARIES}
 )
 
 include_directories(
     ${SYSREPO_INCLUDE_DIRS}
-    ${UCI_INCLUDE_DIR}
+    ${LIBUCI2_INCLUDE_DIR}
     ${LIBUBOX_INCLUDE_DIR}
     ${LIBUBUS_INCLUDE_DIR}
 )

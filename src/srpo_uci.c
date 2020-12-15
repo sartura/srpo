@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <uci.h>
+#include <libuci2.h>
 #include <sysrepo/xpath.h>
 
 #include "srpo_uci.h"
@@ -13,28 +13,70 @@
 #define SRPO_UCI_CONFIG_DIR "/etc/config"
 #endif
 
-static char *path_from_template_get(const char *template, const char *data);
-static int uci_element_set(char *uci_data, bool is_uci_list);
-static int uci_element_delete(char *uci_data, bool is_uci_list);
+#define UCI2_IS_ANYNYMOUS_SECTION(node) (uci2_nc((node)) && (node)->ch[0]->nt != UCI2_NT_SECTION_NAME)
 
-static struct uci_context *uci_context;
+typedef struct srpo_uci_ctx srpo_uci_ctx_t;
+typedef struct srpo_uci_path srpo_uci_path_t;
+typedef struct srpo_path_list srpo_path_list_t;
+
+struct srpo_uci_ctx {
+	uci2_parser_ctx_t *parser_ctx;
+
+	const char *config_dir;
+	char *current_file;
+	char config_path[PATH_MAX];
+};
+
+struct srpo_uci_path {
+	char *package;
+	char *section;
+	char *option;
+	char *value;
+};
+
+struct srpo_path_list {
+	char **data;
+	size_t size;
+};
+
+static srpo_uci_ctx_t *uci_context = NULL;
+
+// helper functions
+int ucipath_add_to_list(const char *uci_config, uci2_n_t *node_type, uci2_n_t *node_sec, bool anonym_sec, srpo_path_list_t *path_list);
+static char *path_from_template_get(const char *template, const char *data);
+static uci2_n_t *uci_get_last_type(uci2_n_t *cfg, const char *type_name);
+
+// path functions
+static void uci_path_init(srpo_uci_path_t *path);
+static void uci_path_print(srpo_uci_path_t *path);
+static int uci_path_parse(srpo_uci_path_t *path, const char *ucipath);
+static void uci_path_free(srpo_uci_path_t *path);
+
+// path list functions
+static void srpo_path_list_init(srpo_path_list_t *ls);
+static void srpo_path_list_append(srpo_path_list_t *ls, char *path);
+static void srpo_path_list_free(srpo_path_list_t *ls);
+
+// context functions
+static srpo_uci_ctx_t *uci_context_alloc(void);
+static void uci_context_set_config_dir(srpo_uci_ctx_t *ctx, const char *dir);
+static int uci_context_load(srpo_uci_ctx_t *ctx, const char *config);
+static int uci_context_create_config_path(srpo_uci_ctx_t *ctx, const char *config);
+static int uci_context_revert(srpo_uci_ctx_t *ctx, const char *config);
+static int uci_context_commit(srpo_uci_ctx_t *ctx, const char *config);
+static void uci_context_free(srpo_uci_ctx_t *ctx);
 
 int srpo_uci_init(void)
 {
 	int error = SRPO_UCI_ERR_OK;
 
-	uci_context = uci_alloc_context();
+	uci_context = uci_context_alloc();
 	if (uci_context == NULL) {
 		error = SRPO_UCI_ERR_UCI;
 		goto error_out;
 	}
 
-	error = uci_set_confdir(uci_context, SRPO_UCI_CONFIG_DIR);
-	if (error) {
-		error = SRPO_UCI_ERR_UCI;
-		goto error_out;
-	}
-
+	uci_context_set_config_dir(uci_context, SRPO_UCI_CONFIG_DIR);
 	goto out;
 
 error_out:
@@ -48,7 +90,7 @@ out:
 void srpo_uci_cleanup(void)
 {
 	if (uci_context) {
-		uci_free_context(uci_context);
+		uci_context_free(uci_context);
 		uci_context = NULL;
 	}
 }
@@ -68,104 +110,110 @@ const char *srpo_uci_error_description_get(srpo_uci_error_e error)
 	}
 }
 
+int ucipath_add_to_list(const char *uci_config, uci2_n_t *node_type, uci2_n_t *node_sec, bool anonym_sec, srpo_path_list_t *path_list)
+{
+	int error = 0;
+
+	// buffers for writing the full node path
+	char path_buffer[PATH_MAX] = {0};
+	char sec_buffer[256] = {0};
+	char list_items_buffer[256] = {0};
+
+	if (node_sec == NULL) {
+		// wanted node not found -> error
+		return SRPO_UCI_ERR_ARGUMENT;
+	}
+
+	if (anonym_sec) {
+		snprintf(sec_buffer, sizeof(sec_buffer), "@%s[%d]", uci2_get_name(node_sec), node_sec->id - 1);
+	} else {
+		snprintf(sec_buffer, sizeof(sec_buffer), "%s", uci2_get_name(node_sec));
+	}
+
+	// write node path in the list
+	snprintf(path_buffer, sizeof(path_buffer), "%s.%s", uci_config, sec_buffer);
+	srpo_path_list_append(path_list, xstrdup(path_buffer));
+
+	// iterate options and lists and write them to the path
+	for (int i = 0; i < node_sec->ch_nr; i++) {
+		uci2_n_t *child = node_sec->ch[i];
+		if (child->nt == UCI2_NT_LIST) {
+			// if its not an option -> list
+			size_t byte_cnt = 0;
+
+			for (int j = 0; j < child->ch_nr; j++) {
+				uci2_n_t *li = child->ch[j];
+
+				if (sizeof(list_items_buffer) - byte_cnt > 0) {
+					snprintf(list_items_buffer + byte_cnt, sizeof(list_items_buffer) - byte_cnt, "\'%s\' ", uci2_get_name(li));
+					byte_cnt += strlen(li->name);
+				} else {
+					error = SRPO_UCI_ERR_UCI;
+					break;
+				}
+			}
+			// remove last space
+			list_items_buffer[byte_cnt - 2] = 0;
+		}
+		snprintf(path_buffer, sizeof(path_buffer), "%s.%s.%s", uci_config, sec_buffer, uci2_get_name(child));
+		srpo_path_list_append(path_list, xstrdup(path_buffer));
+	}
+
+	return error;
+}
+
 int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size, bool convert_to_extended)
 {
-	int error = SRPO_UCI_ERR_OK;
-	struct uci_package *package = NULL;
-	struct uci_element *element_section = NULL;
-	struct uci_section *section = NULL;
-	char *section_name = NULL;
-	size_t section_name_size = 0;
-	struct uci_element *element_option = NULL;
-	struct uci_option *option = NULL;
-	char **uci_path_list_tmp = NULL;
-	size_t uci_path_list_size_tmp = 0;
-	size_t uci_path_size = 0;
-	size_t anonymous_section_index = 0;
-	bool anonymous_section_exists = 0;
-	size_t anonymous_section_list_size = 0;
-	struct anonymous_section {
-		char *type;
-		size_t index;
-	} *anonymous_section_list = NULL;
+	int error = 0;
+	srpo_path_list_t path_list;
 
-	if (uci_config == NULL) {
-		return SRPO_UCI_ERR_ARGUMENT;
-	}
+	srpo_path_list_init(&path_list);
+	error = uci_context_load(uci_context, uci_config);
 
-	if (uci_section_list == NULL) {
-		return SRPO_UCI_ERR_ARGUMENT;
-	}
+	if (error != SRPO_UCI_ERR_OK) {
+		return error;
+	} else {
+		uci2_n_t *root = UCI2_CFG_ROOT(uci_context->parser_ctx);
 
-	if (ucipath_list == NULL) {
-		return SRPO_UCI_ERR_ARGUMENT;
-	}
+		for (size_t iter = 0; iter < uci_section_list_size; iter++) {
+			for (int i = 0; i < root->ch_nr; i++) {
+				uci2_n_t *type = root->ch[i];
 
-	error = uci_load(uci_context, uci_config, &package);
-	if (error) {
-		return SRPO_UCI_ERR_UCI;
-	}
+				// check if types match
+				if (strcmp(type->name, uci_section_list[iter]) == 0) {
 
-	uci_foreach_element(&package->sections, element_section)
-	{
-		section = uci_to_section(element_section);
-		for (size_t i = 0; i < uci_section_list_size; i++) {
-			if (strcmp(section->type, uci_section_list[i]) == 0) {
-				if (section->anonymous && convert_to_extended) { // hande name conversion from cfgXXXXX to @section_type[index] for anonymous sections
-					anonymous_section_index = 0;
-					anonymous_section_exists = false;
-					for (size_t j = 0; j < anonymous_section_list_size; j++) {
-						if (strcmp(anonymous_section_list[j].type, section->type) == 0) { // get the next index for the anonymous section
-							anonymous_section_index = anonymous_section_list[j].index++;
-							anonymous_section_exists = true;
+					// anonymous section? if yes => convert to extended i.e. type.@sec...
+					if (UCI2_IS_ANYNYMOUS_SECTION(type) && convert_to_extended) {
+						error = ucipath_add_to_list(uci_config, type, type, true, &path_list);
+						if (error != 0) {
+							goto error_out;
+						}
+					} else {
+						// if not, iterate through sections and append all sections and its options to the path list
+						for (int j = 0; j < type->ch_nr; j++) {
+							uci2_n_t *sec = type->ch[j];
+
+							error = ucipath_add_to_list(uci_config, type, sec, false, &path_list);
+							if (error != 0) {
+								goto error_out;
+							}
 						}
 					}
-
-					if (anonymous_section_exists == false) { // add the anonymous section to the list if first occurrence
-						anonymous_section_list = xrealloc(anonymous_section_list, (anonymous_section_list_size + 1) * sizeof(struct anonymous_section));
-						anonymous_section_list[anonymous_section_list_size].type = strdup(section->type);
-						anonymous_section_list[anonymous_section_list_size].index = 0;
-						anonymous_section_index = anonymous_section_list[anonymous_section_list_size].index++;
-						anonymous_section_list_size++;
-					}
-
-					section_name_size = strlen(section->type) + 1 + 2 + 20 + 1;
-					section_name = xmalloc(section_name_size);
-					snprintf(section_name, section_name_size, "@%s[%zu]", section->type, anonymous_section_index);
-				} else {
-					section_name = xstrdup(section->e.name);
 				}
-
-				uci_foreach_element(&section->options, element_option)
-				{
-					option = uci_to_option(element_option);
-
-					uci_path_list_tmp = xrealloc(uci_path_list_tmp, (uci_path_list_size_tmp + 1) * sizeof(char *));
-
-					uci_path_size = strlen(uci_config) + 1 + strlen(section_name) + 1 + strlen(option->e.name) + 1;
-					uci_path_list_tmp[uci_path_list_size_tmp] = xmalloc(uci_path_size);
-					snprintf(uci_path_list_tmp[uci_path_list_size_tmp], uci_path_size, "%s.%s.%s", uci_config, section_name, option->e.name);
-
-					uci_path_list_size_tmp++;
-				}
-
-				FREE_SAFE(section_name);
-
-				break;
 			}
 		}
 	}
+	goto out;
 
-	*ucipath_list = uci_path_list_tmp;
-	*ucipath_list_size = uci_path_list_size_tmp;
+error_out:
+	// free the created list if an error occured and set output to NULL
+	srpo_path_list_free(&path_list);
 
-	for (size_t i = 0; i < anonymous_section_list_size; i++) {
-		FREE_SAFE(anonymous_section_list[i].type);
-	}
+out:
+	*ucipath_list = path_list.data;
+	*ucipath_list_size = path_list.size;
 
-	FREE_SAFE(anonymous_section_list);
-
-	return SRPO_UCI_ERR_OK;
+	return error;
 }
 
 int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)
@@ -401,6 +449,7 @@ int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_
 
 	return SRPO_UCI_ERR_OK;
 }
+
 int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool *has_transform_uci_data_private)
 {
 	int error = SRPO_UCI_ERR_OK;
@@ -435,40 +484,29 @@ int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xp
 	return SRPO_UCI_ERR_OK;
 }
 
-static char *path_from_template_get(const char *template, const char *data)
-{
-	char *path = NULL;
-	size_t path_size = 0;
-
-	if (strstr(template, "%s")) {
-		path_size = strlen(template) - 2 + (data ? strlen(data) : 0) + 1;
-		path = xmalloc(path_size);
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-		snprintf(path, path_size, template, data ? data : "");
-#pragma GCC diagnostic warning "-Wformat-nonliteral"
-	} else {
-		path = xstrdup(template);
-	}
-
-	return path;
-}
-
 char *srpo_uci_section_name_get(const char *ucipath)
 {
 	int error = 0;
-	struct uci_ptr uci_ptr = {0};
-	char *uci_data = NULL;
+	srpo_uci_path_t uci_path;
 	char *value_tmp = NULL;
 
-	uci_data = xstrdup(ucipath);
-	error = uci_parse_ptr(uci_context, &uci_ptr, uci_data);
+	uci_path_init(&uci_path);
+
+	error = uci_path_parse(&uci_path, ucipath);
+
 	if (error)
 		goto out;
 
-	value_tmp = xstrdup(uci_ptr.section);
+	// check for empty section
+	if (!uci_path.section) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	value_tmp = xstrdup(uci_path.section);
 
 out:
-	FREE_SAFE(uci_data);
+	uci_path_free(&uci_path);
 
 	return value_tmp;
 }
@@ -504,8 +542,10 @@ char *srpo_uci_xpath_key_value_get(const char *xpath, int level)
 int srpo_uci_section_create(const char *ucipath, const char *uci_section_type)
 {
 	int error = SRPO_UCI_ERR_OK;
-	size_t uci_data_size = 0;
-	char *uci_data = NULL;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *last_type = NULL;
+
+	uci_path_init(&uci_path);
 
 	if (ucipath == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
@@ -515,41 +555,57 @@ int srpo_uci_section_create(const char *ucipath, const char *uci_section_type)
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
-	uci_data_size = strlen(ucipath) + 1 + strlen(uci_section_type) + 1;
-	uci_data = xcalloc(1, uci_data_size);
-	snprintf(uci_data, uci_data_size, "%s=%s", ucipath, uci_section_type);
+	error = uci_path_parse(&uci_path, ucipath);
 
-	error = uci_element_set(uci_data, false);
-	if (error) {
+	last_type = uci_get_last_type(UCI2_CFG_ROOT(uci_context->parser_ctx), uci_section_type);
+
+	if (!last_type) {
 		error = SRPO_UCI_ERR_UCI;
 		goto out;
 	}
 
-out:
-	FREE_SAFE(uci_data);
+	uci2_add_S(uci_context->parser_ctx, last_type, uci_path.section);
 
+out:
+	uci_path_free(&uci_path);
 	return error;
 }
 
 int srpo_uci_section_delete(const char *ucipath)
 {
 	int error = SRPO_UCI_ERR_OK;
-	char *uci_data = NULL;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *lookup_node = NULL;
+
+	uci_path_init(&uci_path);
 
 	if (ucipath == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
-	uci_data = xstrdup(ucipath);
-	error = uci_element_delete(uci_data, false);
+	error = uci_path_parse(&uci_path, ucipath);
+
 	if (error) {
-		error = SRPO_UCI_ERR_UCI;
+		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
 	}
 
-out:
-	FREE_SAFE(uci_data);
+	if (!uci_path.section || !uci_path.package) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
 
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section);
+
+	if (!lookup_node) {
+		// no such node found
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_del(lookup_node);
+out:
+	uci_path_free(&uci_path);
 	return error;
 }
 
@@ -557,8 +613,10 @@ int srpo_uci_option_set(const char *ucipath, const char *value, srpo_uci_transfo
 {
 	int error = SRPO_UCI_ERR_OK;
 	char *transform_value = NULL;
-	size_t uci_data_size = 0;
-	char *uci_data = NULL;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *lookup_node = NULL;
+
+	uci_path_init(&uci_path);
 
 	if (ucipath == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
@@ -570,22 +628,28 @@ int srpo_uci_option_set(const char *ucipath, const char *value, srpo_uci_transfo
 
 	transform_value = transform_sysrepo_data_cb ? transform_sysrepo_data_cb(value, private_data) : xstrdup(value);
 	if (transform_value == NULL) {
+		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
 	}
 
-	uci_data_size = strlen(ucipath) + 1 + strlen(transform_value) + 1;
-	uci_data = xcalloc(1, uci_data_size);
-	snprintf(uci_data, uci_data_size, "%s=%s", ucipath, transform_value);
-
-	error = uci_element_set(uci_data, false);
-	if (error) {
-		error = SRPO_UCI_ERR_UCI;
+	uci_path_parse(&uci_path, ucipath);
+	if (!uci_path.package || !uci_path.section || !uci_path.option) {
+		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
 	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+
+	if (!lookup_node) {
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_change_value(lookup_node, transform_value);
 
 out:
+	uci_path_free(&uci_path);
 	FREE_SAFE(transform_value);
-	FREE_SAFE(uci_data);
 
 	return error;
 }
@@ -593,21 +657,38 @@ out:
 int srpo_uci_option_remove(const char *ucipath)
 {
 	int error = 0;
-	char *uci_data = NULL;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *lookup_node = NULL;
+
+	uci_path_init(&uci_path);
 
 	if (ucipath == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
-	uci_data = xstrdup(ucipath);
-	error = uci_element_delete(uci_data, false);
+	error = uci_path_parse(&uci_path, ucipath);
+
 	if (error) {
-		error = SRPO_UCI_ERR_UCI;
+		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
 	}
 
+	if (!uci_path.package || !uci_path.section || !uci_path.option) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+
+	if (!lookup_node) {
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_del(lookup_node);
+
 out:
-	FREE_SAFE(uci_data);
+	uci_path_free(&uci_path);
 
 	return error;
 }
@@ -616,8 +697,10 @@ int srpo_uci_list_set(const char *ucipath, const char *value, srpo_uci_transform
 {
 	int error = SRPO_UCI_ERR_OK;
 	char *transform_value = NULL;
-	size_t uci_data_size = 0;
-	char *uci_data = NULL;
+	uci2_n_t *lookup_node = NULL;
+	srpo_uci_path_t uci_path;
+
+	uci_path_init(&uci_path);
 
 	if (ucipath == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
@@ -629,22 +712,33 @@ int srpo_uci_list_set(const char *ucipath, const char *value, srpo_uci_transform
 
 	transform_value = transform_sysrepo_data_cb ? transform_sysrepo_data_cb(value, private_data) : xstrdup(value);
 	if (transform_value == NULL) {
+		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
 	}
 
-	uci_data_size = strlen(ucipath) + 1 + strlen(transform_value) + 1;
-	uci_data = xcalloc(1, uci_data_size);
-	snprintf(uci_data, uci_data_size, "%s=%s", ucipath, transform_value);
-
-	error = uci_element_set(uci_data, true);
+	error = uci_path_parse(&uci_path, ucipath);
 	if (error) {
-		error = SRPO_UCI_ERR_UCI;
+		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
 	}
+
+	if (!uci_path.package || !uci_path.section || !uci_path.option) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+
+	if (!lookup_node) {
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_add_I(uci_context->parser_ctx, lookup_node, transform_value);
 
 out:
+	uci_path_free(&uci_path);
 	FREE_SAFE(transform_value);
-	FREE_SAFE(uci_data);
 
 	return error;
 }
@@ -652,8 +746,10 @@ out:
 int srpo_uci_list_remove(const char *ucipath, const char *value)
 {
 	int error = SRPO_UCI_ERR_OK;
-	size_t uci_data_size = 0;
-	char *uci_data = NULL;
+	uci2_n_t *lookup_node = NULL;
+	srpo_uci_path_t uci_path;
+
+	uci_path_init(&uci_path);
 
 	if (ucipath == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
@@ -663,138 +759,133 @@ int srpo_uci_list_remove(const char *ucipath, const char *value)
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
-	uci_data_size = strlen(ucipath) + 1 + strlen(value) + 1;
-	uci_data = xcalloc(1, uci_data_size);
-	snprintf(uci_data, uci_data_size, "%s=%s", ucipath, value);
-
-	error = uci_element_delete(uci_data, true);
+	error = uci_path_parse(&uci_path, ucipath);
 	if (error) {
-		error = SRPO_UCI_ERR_UCI;
+		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
 	}
 
+	if (!uci_path.package || !uci_path.section || !uci_path.option) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
+	}
+
+	lookup_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option, value);
+
+	if (!lookup_node) {
+		error = SRPO_UCI_ERR_NOT_FOUND;
+		goto out;
+	}
+
+	uci2_del(lookup_node);
+
 out:
-	FREE_SAFE(uci_data);
+	uci_path_free(&uci_path);
 
 	return error;
-}
-
-static int uci_element_set(char *uci_data, bool is_uci_list)
-{
-	int error = 0;
-	struct uci_ptr uci_ptr = {0};
-
-	error = uci_lookup_ptr(uci_context, &uci_ptr, uci_data, true);
-	if (error) {
-		return -1;
-	}
-
-	error = is_uci_list ? uci_add_list(uci_context, &uci_ptr) : uci_set(uci_context, &uci_ptr);
-	if (error) {
-		return -1;
-	}
-
-	return 0;
-}
-
-static int uci_element_delete(char *uci_data, bool is_uci_list)
-{
-	int error = 0;
-	struct uci_ptr uci_ptr = {0};
-
-	error = uci_lookup_ptr(uci_context, &uci_ptr, uci_data, true);
-	if (error) {
-		return -1;
-	}
-
-	if (is_uci_list) {
-		uci_del_list(uci_context, &uci_ptr);
-	} else {
-		uci_delete(uci_context, &uci_ptr);
-	}
-
-	return 0;
 }
 
 int srpo_uci_element_value_get(const char *ucipath, srpo_uci_transform_data_cb transform_uci_data_cb, void *private_data, char ***value_list, size_t *value_list_size)
 {
 	int error = 0;
-	char *ucipath_tmp = NULL;
-	struct uci_ptr uci_ptr = {0};
-	char *value = NULL;
-	struct uci_element *element = NULL;
-	struct uci_option *option = NULL;
-	char **value_list_tmp = NULL;
-	size_t value_list_size_tmp = 0;
+	srpo_uci_path_t uci_path;
+	uci2_n_t *uci_root, *uci_type, *uci_section, *tmp_node = NULL;
+	struct {
+		char **list;
+		size_t size;
+	} val_list = {0, 0};
+
+	*value_list = NULL;
+	*value_list_size = 0;
+
+	uci_path_init(&uci_path);
 
 	if (ucipath == NULL) {
 		return SRPO_UCI_ERR_ARGUMENT;
 	}
 
-	ucipath_tmp = xstrdup(ucipath);
-	*value_list = NULL;
-	*value_list_size = 0;
-
-	error = uci_lookup_ptr(uci_context, &uci_ptr, ucipath_tmp, true);
-	if (error || (uci_ptr.flags & UCI_LOOKUP_COMPLETE) == 0) {
-		return SRPO_UCI_ERR_UCI;
+	error = uci_path_parse(&uci_path, ucipath);
+	if (error) {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
 	}
 
-	if (uci_ptr.o->type == UCI_TYPE_STRING) {
-		value = transform_uci_data_cb ? transform_uci_data_cb(uci_ptr.o->v.string, private_data) : xstrdup(uci_ptr.o->v.string);
-		if (value == NULL) {
+	// there needs to be an options which is wanted -> no option == noting to return
+	if (uci_path.package && uci_path.section && uci_path.option) {
+		// tmp_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+		uci_root = UCI2_CFG_ROOT(uci_context->parser_ctx);
+
+		for (int i = 0; i < uci_root->ch_nr; i++) {
+			uci_type = uci_root->ch[i];
+			for (int j = 0; j < uci_type->ch_nr; j++) {
+				// named section match
+				if (strcmp(uci_type->ch[j]->name, uci_path.section) == 0) {
+					uci_section = uci_type->ch[j];
+					break;
+				}
+			}
+		}
+
+		if (uci_section == NULL) {
+			error = SRPO_UCI_ERR_NOT_FOUND;
 			goto out;
 		}
 
-		value_list_tmp = xrealloc(value_list_tmp, (value_list_size_tmp + 1) * sizeof(char *));
-		value_list_tmp[value_list_size_tmp] = value;
-		value_list_size_tmp++;
-
-	} else if (uci_ptr.o->type == UCI_TYPE_LIST) {
-		uci_foreach_element(&uci_ptr.o->v.list, element)
-		{
-			option = uci_to_option(element);
-
-			value = transform_uci_data_cb ? transform_uci_data_cb(option->e.name, private_data) : xstrdup(option->e.name);
-			if (value == NULL) {
-				continue;
+		for (int i = 0; i < uci_section->ch_nr; i++) {
+			// option name match
+			if (strcmp(uci_section->ch[i]->name, uci_path.option) == 0) {
+				tmp_node = uci_section->ch[i];
+				break;
 			}
-
-			value_list_tmp = xrealloc(value_list_tmp, (value_list_size_tmp + 1) * sizeof(char *));
-			value_list_tmp[value_list_size_tmp] = value;
-			value_list_size_tmp++;
 		}
+
+		if (tmp_node == NULL) {
+			error = SRPO_UCI_ERR_NOT_FOUND;
+			goto out;
+		}
+
+		if (tmp_node->nt == UCI2_NT_LIST) {
+			// gather all values
+			uci2_iter(tmp_node, li)
+			{
+				val_list.list = xrealloc(val_list.list, sizeof(char *) * (++val_list.size));
+				val_list.list[val_list.size - 1] = transform_uci_data_cb ? transform_uci_data_cb(li->name, private_data) : xstrdup(li->name);
+			}
+		} else if (tmp_node->nt == UCI2_NT_OPTION) {
+			// gather one value
+			val_list.list = xrealloc(val_list.list, sizeof(char *) * (++val_list.size));
+			val_list.list[val_list.size - 1] = transform_uci_data_cb ? transform_uci_data_cb(tmp_node->value, private_data) : xstrdup(tmp_node->value);
+		} else {
+			// some internal libuci2 error
+			error = SRPO_UCI_ERR_UCI;
+			goto out;
+		}
+	} else if (uci_path.package && uci_path.section) {
+		val_list.list = xrealloc(val_list.list, sizeof(char *) * (++val_list.size));
+		val_list.list[val_list.size - 1] = xstrdup("");
+	} else {
+		error = SRPO_UCI_ERR_ARGUMENT;
+		goto out;
 	}
 
-	*value_list = value_list_tmp;
-	*value_list_size = value_list_size_tmp;
-
+	*value_list = val_list.list;
+	*value_list_size = val_list.size;
 out:
-	FREE_SAFE(ucipath_tmp);
-
-	return error ? SRPO_UCI_ERR_TRANSFORM_CB : SRPO_UCI_ERR_OK;
+	uci_path_free(&uci_path);
+	return error;
 }
 
 int srpo_uci_revert(const char *uci_config)
 {
 	int error = SRPO_UCI_ERR_OK;
 	char *uci_config_tmp = NULL;
-	struct uci_ptr uci_ptr = {0};
 
 	if (uci_config == NULL) {
 		error = SRPO_UCI_ERR_UCI;
 		goto out;
 	}
 
-	uci_config_tmp = xstrdup(uci_config);
-
-	error = uci_lookup_ptr(uci_context, &uci_ptr, uci_config_tmp, true);
-	if (error || (uci_ptr.flags & UCI_LOOKUP_COMPLETE) == 0) {
-		error = SRPO_UCI_ERR_UCI;
-		goto out;
-	}
-
-	error = uci_revert(uci_context, &uci_ptr);
+	error = uci_context_revert(uci_context, uci_config);
 	if (error) {
 		error = SRPO_UCI_ERR_UCI;
 		goto out;
@@ -809,21 +900,13 @@ int srpo_uci_commit(const char *uci_config)
 {
 	int error = SRPO_UCI_ERR_OK;
 	char *uci_config_tmp = NULL;
-	struct uci_ptr uci_ptr = {0};
 
 	if (uci_config == NULL) {
-		return SRPO_UCI_ERR_ARGUMENT;
-	}
-
-	uci_config_tmp = xstrdup(uci_config);
-
-	error = uci_lookup_ptr(uci_context, &uci_ptr, uci_config_tmp, true);
-	if (error || (uci_ptr.flags & UCI_LOOKUP_COMPLETE) == 0) {
 		error = SRPO_UCI_ERR_UCI;
 		goto out;
 	}
 
-	error = uci_commit(uci_context, &uci_ptr.p, false);
+	error = uci_context_commit(uci_context, uci_config);
 	if (error) {
 		error = SRPO_UCI_ERR_UCI;
 		goto out;
@@ -831,6 +914,214 @@ int srpo_uci_commit(const char *uci_config)
 
 out:
 	FREE_SAFE(uci_config_tmp);
-
 	return error;
+}
+
+static char *path_from_template_get(const char *template, const char *data)
+{
+	char *path = NULL;
+	size_t path_size = 0;
+
+	if (strstr(template, "%s")) {
+		path_size = strlen(template) - 2 + (data ? strlen(data) : 0) + 1;
+		path = xmalloc(path_size);
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+		snprintf(path, path_size, template, data ? data : "");
+#pragma GCC diagnostic warning "-Wformat-nonliteral"
+	} else {
+		path = xstrdup(template);
+	}
+
+	return path;
+}
+
+static uci2_n_t *uci_get_last_type(uci2_n_t *cfg, const char *type_name)
+{
+	uci2_n_t *ret_node = NULL;
+	uci2_iter(cfg, t)
+	{
+		// check that the node is not deleted
+		if (t->parent && strcmp(t->name, type_name) == 0) {
+			ret_node = t;
+		}
+	}
+	return ret_node;
+}
+
+static void uci_path_init(srpo_uci_path_t *ptr)
+{
+	ptr->package = NULL;
+	ptr->section = NULL;
+	ptr->option = NULL;
+	ptr->value = NULL;
+}
+
+static void uci_path_print(srpo_uci_path_t *ptr)
+{
+	if (ptr->package)
+		printf("ptr->package = %s\n", ptr->package);
+	if (ptr->section)
+		printf("ptr->section = %s\n", ptr->section);
+	if (ptr->option)
+		printf("ptr->option = %s\n", ptr->option);
+	if (ptr->value)
+		printf("ptr->value = %s\n", ptr->value);
+}
+
+static int uci_path_parse(srpo_uci_path_t *path, const char *uci_path)
+{
+	int error = 0;
+	size_t opt_pos = 0;
+	const char delims[] = ".[]=";
+	char *token = NULL;
+	char *ucipath = xstrdup(uci_path);
+
+	struct {
+		char **list;
+		size_t size;
+	} parts = {0, 0};
+
+	token = strtok((char *) ucipath, delims);
+	while (token != NULL) {
+		parts.list = xrealloc(parts.list, sizeof(char *) * (++parts.size));
+		parts.list[parts.size - 1] = xstrdup(token);
+		token = strtok(NULL, delims);
+	}
+	if (parts.size > 0) {
+		path->package = xstrdup(parts.list[0]);
+	}
+	if (parts.size > 1) {
+		if (parts.list[1][0] == '@' && parts.size > 2) {
+			size_t size = strlen(parts.list[1]) + strlen(parts.list[2]) + 1;
+			path->section = xmalloc(sizeof(char) * size);
+			snprintf(path->section, size, "%s#%d", parts.list[1] + 1, atoi(parts.list[2]) + 1);
+			opt_pos = 3;
+		} else {
+			path->section = xstrdup(parts.list[1]);
+			opt_pos = 2;
+		}
+	}
+	if (parts.size > opt_pos) {
+		if (parts.size <= opt_pos + 1) {
+			path->option = xstrdup(parts.list[opt_pos]);
+		} else {
+			path->option = xstrdup(parts.list[opt_pos]);
+			path->value = xstrdup(parts.list[opt_pos + 1]);
+		}
+	}
+
+	for (size_t i = 0; i < parts.size; i++) {
+		FREE_SAFE(parts.list[i]);
+	}
+	FREE_SAFE(parts.list);
+	FREE_SAFE(ucipath);
+	return error;
+}
+
+static void uci_path_free(srpo_uci_path_t *ptr)
+{
+	FREE_SAFE(ptr->package);
+	FREE_SAFE(ptr->section);
+	FREE_SAFE(ptr->option);
+	FREE_SAFE(ptr->value);
+}
+
+static void srpo_path_list_init(srpo_path_list_t *ls)
+{
+	ls->data = NULL;
+	ls->size = 0;
+}
+
+static void srpo_path_list_append(srpo_path_list_t *ls, char *path)
+{
+	ls->data = xrealloc(ls->data, sizeof(char *) * (++ls->size));
+	ls->data[ls->size - 1] = path;
+}
+
+static void srpo_path_list_free(srpo_path_list_t *ls)
+{
+	if (ls->data) {
+		for (size_t i = 0; i < ls->size; i++) {
+			FREE_SAFE(ls->data[i]);
+		}
+		FREE_SAFE(ls->data);
+		srpo_path_list_init(ls);
+	}
+}
+
+static srpo_uci_ctx_t *uci_context_alloc(void)
+{
+	srpo_uci_ctx_t *ctx = xcalloc(1, sizeof(srpo_uci_ctx_t));
+	return ctx;
+}
+
+static void uci_context_set_config_dir(srpo_uci_ctx_t *ctx, const char *dir)
+{
+	ctx->config_dir = dir;
+}
+
+static int uci_context_load(srpo_uci_ctx_t *ctx, const char *config)
+{
+	int error = 0;
+	ctx->current_file = xstrdup(config);
+	error = uci_context_create_config_path(ctx, config);
+	ctx->parser_ctx = uci2_parse_file((const char *) ctx->config_path);
+
+	if (!ctx->parser_ctx) {
+		error = SRPO_UCI_ERR_UCI_FILE;
+	}
+	return error;
+}
+
+static int uci_context_create_config_path(srpo_uci_ctx_t *ctx, const char *config)
+{
+	int error = 0;
+	size_t path_len = strlen(ctx->config_dir);
+	size_t config_len = strlen(config);
+
+	if (path_len + config_len + 1 > sizeof(ctx->config_path)) {
+		error = SRPO_UCI_ERR_FILE_PATH_SIZE;
+		goto out;
+	}
+
+	snprintf(ctx->config_path, sizeof(ctx->config_path), "%s", ctx->config_dir);
+	if (ctx->config_path[path_len - 1] != '/') {
+		// no trailing '/' -> add one
+		ctx->config_path[path_len] = '/';
+		ctx->config_path[++path_len] = 0;
+	}
+	snprintf(ctx->config_path + path_len, sizeof(ctx->config_path) - path_len, "%s", config);
+out:
+	return error;
+}
+
+static int uci_context_revert(srpo_uci_ctx_t *ctx, const char *config)
+{
+	int error = 0;
+	if (strcmp(config, ctx->current_file) == 0) {
+		// reload the file
+		uci2_free_ctx(ctx->parser_ctx);
+		error = uci_context_load(ctx, config);
+	}
+	return error;
+}
+static int uci_context_commit(srpo_uci_ctx_t *ctx, const char *config)
+{
+	int error = 0;
+	if (strcmp(config, ctx->current_file) == 0) {
+		// write to file
+		error = uci2_export_ctx_fsync(ctx->parser_ctx, ctx->config_path);
+	}
+	return error;
+}
+
+static void uci_context_free(srpo_uci_ctx_t *ctx)
+{
+	if (ctx) {
+		if (ctx->current_file) {
+			FREE_SAFE(ctx->current_file);
+		}
+		uci2_free_ctx(ctx->parser_ctx);
+		free(ctx);
+	}
 }
