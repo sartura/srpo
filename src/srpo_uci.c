@@ -131,7 +131,7 @@ int ucipath_add_to_list(const char *uci_config, uci2_n_t *node_type, uci2_n_t *n
 	}
 
 	// write node path in the list
-	snprintf(path_buffer, sizeof(path_buffer), "%s.%s=%s", uci_config, sec_buffer, uci2_get_name(node_type));
+	snprintf(path_buffer, sizeof(path_buffer), "%s.%s", uci_config, sec_buffer);
 	srpo_path_list_append(path_list, xstrdup(path_buffer));
 
 	// iterate options and lists and write them to the path
@@ -155,9 +155,10 @@ int ucipath_add_to_list(const char *uci_config, uci2_n_t *node_type, uci2_n_t *n
 			// remove last space
 			list_items_buffer[byte_cnt - 2] = 0;
 		}
-		snprintf(path_buffer, sizeof(path_buffer), "%s.%s.%s=%s", uci_config, sec_buffer, uci2_get_name(child), child->nt == UCI2_NT_LIST ? list_items_buffer : uci2_get_value(child));
+		snprintf(path_buffer, sizeof(path_buffer), "%s.%s.%s", uci_config, sec_buffer, uci2_get_name(child));
 		srpo_path_list_append(path_list, xstrdup(path_buffer));
 	}
+
 	return error;
 }
 
@@ -179,7 +180,7 @@ int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_l
 				uci2_n_t *type = root->ch[i];
 
 				// check if types match
-				if (strcmp(type->name, uci_section_list[i]) == 0) {
+				if (strcmp(type->name, uci_section_list[iter]) == 0) {
 
 					// anonymous section? if yes => convert to extended i.e. type.@sec...
 					if (UCI2_IS_ANYNYMOUS_SECTION(type) && convert_to_extended) {
@@ -203,9 +204,11 @@ int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_l
 		}
 	}
 	goto out;
+
 error_out:
 	// free the created list if an error occured and set output to NULL
 	srpo_path_list_free(&path_list);
+
 out:
 	*ucipath_list = path_list.data;
 	*ucipath_list_size = path_list.size;
@@ -501,10 +504,10 @@ char *srpo_uci_section_name_get(const char *ucipath)
 	}
 
 	value_tmp = xstrdup(uci_path.section);
-	uci_path_print(&uci_path);
 
 out:
 	uci_path_free(&uci_path);
+
 	return value_tmp;
 }
 
@@ -786,7 +789,7 @@ int srpo_uci_element_value_get(const char *ucipath, srpo_uci_transform_data_cb t
 {
 	int error = 0;
 	srpo_uci_path_t uci_path;
-	uci2_n_t *tmp_node = NULL;
+	uci2_n_t *uci_root, *uci_type, *uci_section, *tmp_node = NULL;
 	struct {
 		char **list;
 		size_t size;
@@ -802,7 +805,6 @@ int srpo_uci_element_value_get(const char *ucipath, srpo_uci_transform_data_cb t
 	}
 
 	error = uci_path_parse(&uci_path, ucipath);
-
 	if (error) {
 		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
@@ -810,9 +812,34 @@ int srpo_uci_element_value_get(const char *ucipath, srpo_uci_transform_data_cb t
 
 	// there needs to be an options which is wanted -> no option == noting to return
 	if (uci_path.package && uci_path.section && uci_path.option) {
-		tmp_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+		// tmp_node = uci2_q(uci_context->parser_ctx, uci_path.section, uci_path.option);
+		uci_root = UCI2_CFG_ROOT(uci_context->parser_ctx);
 
-		if (!tmp_node) {
+		for (int i = 0; i < uci_root->ch_nr; i++) {
+			uci_type = uci_root->ch[i];
+			for (int j = 0; j < uci_type->ch_nr; j++) {
+				// named section match
+				if (strcmp(uci_type->ch[j]->name, uci_path.section) == 0) {
+					uci_section = uci_type->ch[j];
+					break;
+				}
+			}
+		}
+
+		if (uci_section == NULL) {
+			error = SRPO_UCI_ERR_NOT_FOUND;
+			goto out;
+		}
+
+		for (int i = 0; i < uci_section->ch_nr; i++) {
+			// option name match
+			if (strcmp(uci_section->ch[i]->name, uci_path.option) == 0) {
+				tmp_node = uci_section->ch[i];
+				break;
+			}
+		}
+
+		if (tmp_node == NULL) {
 			error = SRPO_UCI_ERR_NOT_FOUND;
 			goto out;
 		}
@@ -833,6 +860,9 @@ int srpo_uci_element_value_get(const char *ucipath, srpo_uci_transform_data_cb t
 			error = SRPO_UCI_ERR_UCI;
 			goto out;
 		}
+	} else if (uci_path.package && uci_path.section) {
+		val_list.list = xrealloc(val_list.list, sizeof(char *) * (++val_list.size));
+		val_list.list[val_list.size - 1] = xstrdup("");
 	} else {
 		error = SRPO_UCI_ERR_ARGUMENT;
 		goto out;
@@ -973,7 +1003,7 @@ static int uci_path_parse(srpo_uci_path_t *path, const char *uci_path)
 	}
 	if (parts.size > opt_pos) {
 		if (parts.size <= opt_pos + 1) {
-			path->value = xstrdup(parts.list[opt_pos]);
+			path->option = xstrdup(parts.list[opt_pos]);
 		} else {
 			path->option = xstrdup(parts.list[opt_pos]);
 			path->value = xstrdup(parts.list[opt_pos + 1]);
