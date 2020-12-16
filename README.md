@@ -107,16 +107,16 @@ The API consinst of the following elements:
   * `void srpo_uci_cleanup(void)`
   * `const char *srpo_uci_error_description_get(srpo_uci_error_e error)`
   * `int srpo_uci_ucipath_list_get(const char *uci_config, const char **uci_section_list, size_t uci_section_list_size, char ***ucipath_list, size_t *ucipath_list_size, bool convert_to_extended)`
-  * `int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)`
-  * `int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)`
+  * `int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char ***ucipath_list, size_t *ucipath_list_size)`
+  * `int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char ***xpath_list, size_tt *xpath_list_size)`
   * `char *srpo_uci_section_name_get(const char *ucipath)`
   * `char *srpo_uci_xpath_key_value_get(const char *xpath, int level)`
   * `int srpo_uci_path_get(const char *target, const char *from_template, const char *to_template, srpo_uci_transform_path_cb transform_path_cb, srpo_uci_path_direction_t direction, char **path)`
-  * `int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)`
-  * `int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)`
-  * `int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, const char **uci_section_type)`
-  * `int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool *has_transform_sysrepo_data_private)`
-  * `int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool *has_transform_uci_data_private)`
+  * `int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb **transform_sysrepo_data_cb_list, size_t *transform_sysrepo_data_cb_list_size)`
+  * `int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb **transform_uci_data_cb_list, size_t *transform_uci_data_cb_list_size)`
+  * `int srpo_uci_section_type_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, const char ***uci_section_type_list, size_t *uci_section_type_list_size)`
+  * `int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool **has_transform_sysrepo_data_private_list, size_t *has_transform_sysrepo_data_private_list_size)`
+  * `int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool **has_transform_uci_data_private_list, size_t *has_transform_uci_data_private_list_size)`
   * `int srpo_uci_section_create(const char *ucipath, const char *uci_section_type)`
   * `int srpo_uci_section_delete(const char *ucipath)`
   * `int srpo_uci_option_set(const char *ucipath, const char *value, srpo_uci_transform_data_cb transform_sysrepo_data_cb, void *private_data)`
@@ -261,7 +261,7 @@ Function argumets:
 Function return:
 * `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
-## int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char **ucipath)
+## int srpo_uci_xpath_to_ucipath_convert(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, char ***ucipath_list, size_t *ucipath_list_size)
 
 Function for converting the XPath to UCI path.
 
@@ -274,16 +274,18 @@ Function arguments:
   * can not be NULL
 * xpath_uci_template_map_size:
   * `size_t` number specifying the number of entries in the `xpath_uci_template_map` map
-* ucipath:
-  * string containing the resulting UCI path that is mapped with the provided `xpath`
+* ucipath_list:
+  * list of strings containing the resulting UCI paths that are mapped with the provided `xpath`
   * allocated dynamically user needs to call free
+* ucipath_list_size:
+  * pointer used to return the size of ucipath_list
 
 Function return:
 * `SRPO_UCI_ERR_OK` on success
 * `SRPO_UCI_ERR_NOT_FOUND` if the `xpath` can't be found in the `xpath_uci_template_map`
 * `srpo_uci_error_e` error code on failure
 
-## int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char **xpath)
+## int srpo_uci_ucipath_to_xpath_convert(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, char ***xpath_list, size_tt *xpath_list_size)
 
 Function for converting the UCI path to XPath.
 
@@ -296,9 +298,11 @@ Function arguments:
   * can not be NULL
 * uci_xpath_template_map_size:
   * `size_t` number specifying the number of entries in the `uci_xpath_template_map` map
-* xpath:
-  * string containing the resulting Xpath that is mapped with the provided `ucipath`
+* xpath_list:
+  * list of strings containing the resulting Xpaths that is mapped with the provided `ucipath`
   * allocated dynamically user needs to call free
+* xpath_list_size:
+  * pointer used to return the size of xpath_list
 
 Function return:
 * `SRPO_UCI_ERR_OK` on success
@@ -363,7 +367,7 @@ Function return:
 * `SRPO_UCI_ERR_ARGUMENT` if the `ucipath` can't be found in the `uci_xpath_template_map`
 * `srpo_uci_error_e` error code on failure
 
-## int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb *transform_sysrepo_data_cb)
+## int srpo_uci_transform_sysrepo_data_cb_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, srpo_uci_transform_data_cb **transform_sysrepo_data_cb_list, size_t *transform_sysrepo_data_cb_list_size)
 
 Function for returning the `srpo_uci_transform_data_cb` data transformation callback for Sysrepo data for a given `xpath`.
 
@@ -376,14 +380,16 @@ Function arguments:
   * can not be NULL
 * xpath_uci_template_map_size:
   * `size_t` number specifying the number of entries in the `xpath_uci_template_map` map
-* transform_sysrepo_data_cb:
-  * function pointer to the data transform callback for Sysrepo data
+* transform_sysrepo_data_cb_list:
+  * list of function pointers to the data transform callback for Sysrepo data
   * can be NULL if no callback is registered for the provided `xpath`
+* transform_sysrepo_data_cb_list_size:
+  * pointer used to return the size of the callbacks list
 
 Function return:
 * `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
-## int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb *transform_uci_data_cb)
+## int srpo_uci_transform_uci_data_cb_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, srpo_uci_transform_data_cb **transform_uci_data_cb_list, size_t *transform_uci_data_cb_list_size)
 
 Function for returning the `srpo_uci_transform_data_cb` data transformation callback for UCI data for a given `ucipath`.
 
@@ -396,14 +402,16 @@ Function arguments:
   * can not be NULL
 * uci_xpath_template_map_size:
   * `size_t` number specifying the number of entries in the `uci_xpath_template_map` map
-* transform_uci_data_cb:
-  * function pointer to the data transform callback for UCI data
+* transform_uci_data_cb_list:
+  * list of function pointers to the data transform callback for UCI data
   * can be NULL if no callback is registered for the provided `ucipath`
+* transform_uci_data_cb_list_size:
+  * pointer used to return the size of the callbacks list
 
 Function return:
 * `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
-## int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool *has_transform_sysrepo_data_private)
+## int srpo_uci_has_transform_sysrepo_data_private_get(const char *xpath, srpo_uci_xpath_uci_template_map_t *xpath_uci_template_map, size_t xpath_uci_template_map_size, bool **has_transform_sysrepo_data_private_list, size_t *has_transform_sysrepo_data_private_list_size)
 
 Function for returnig the flag describing if the `srpo_uci_transform_data_cb` registered for the given `xpath` takes any additional arguments as private data.
 
@@ -416,14 +424,16 @@ Function arguments:
   * can not be NULL
 * xpath_uci_template_map_size:
   * `size_t` number specifying the number of entries in the `xpath_uci_template_map` map
-* has_transform_sysrepo_data_private
-  * returning boolean flag describining if the registered `srpo_uci_transform_data_cb` for transforming Sysrepo data takes any additional arguments as private data
-  * if no `srpo_uci_transform_data_cb` function is registered `false` is returned
+* has_transform_sysrepo_data_private_list
+  * returning list of boolean flags describining if the registered `srpo_uci_transform_data_cb` for transforming Sysrepo data takes any additional arguments as private data
+  * if no `srpo_uci_transform_data_cb` function is registered for a specific path `false` is returned for it
+* has_transform_sysrepo_data_private_list_size:
+  * returns the number of elements in `has_transform_sysrepo_data_private_list`
 
 Function return:
 * `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
 
-## int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool *has_transform_uci_data_private)
+## int srpo_uci_has_transform_uci_data_private_get(const char *ucipath, srpo_uci_xpath_uci_template_map_t *uci_xpath_template_map, size_t uci_xpath_template_map_size, bool **has_transform_uci_data_private_list, size_t *has_transform_uci_data_private_list_size)
 
 Function for returnig the flag describing if the `srpo_uci_transform_data_cb` registered for the given `ucipath` takes any additional arguments as private data.
 
@@ -436,9 +446,11 @@ Function arguments:
   * can not be NULL
 * uci_xpath_template_map_size:
   * `size_t` number specifying the number of entries in the `uci_xpath_template_map` map
-* has_transform_uci_data_private
-  * returning boolean flag describining if the registered `srpo_uci_transform_data_cb` for transforming UCI data takes any additional arguments as private data
-  * if no `srpo_uci_transform_data_cb` function is registered `false` is returned
+* has_transform_uci_data_private_list
+  * returning list of boolean flags describining if the registered `srpo_uci_transform_data_cb` for transforming UCI data takes any additional arguments as private data
+  * if no `srpo_uci_transform_data_cb` function is registered for a specific path `false` is returned for it
+* has_transform_uci_data_private_list_size:
+  * returns the number of elements in `has_transform_uci_data_private_list`
 
 Function return:
 * `SRPO_UCI_ERR_OK` on success, a `srpo_uci_error_e` error code on failure
