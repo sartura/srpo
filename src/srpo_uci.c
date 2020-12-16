@@ -31,7 +31,6 @@ struct srpo_uci_path {
 	char *package;
 	char *section;
 	char *option;
-	char *value;
 };
 
 struct srpo_path_list {
@@ -48,7 +47,6 @@ static uci2_n_t *uci_get_last_type(uci2_n_t *cfg, const char *type_name);
 
 // path functions
 static void uci_path_init(srpo_uci_path_t *path);
-static void uci_path_print(srpo_uci_path_t *path);
 static int uci_path_parse(srpo_uci_path_t *path, const char *ucipath);
 static void uci_path_free(srpo_uci_path_t *path);
 
@@ -1035,26 +1033,13 @@ static void uci_path_init(srpo_uci_path_t *ptr)
 	ptr->package = NULL;
 	ptr->section = NULL;
 	ptr->option = NULL;
-	ptr->value = NULL;
-}
-
-static void uci_path_print(srpo_uci_path_t *ptr)
-{
-	if (ptr->package)
-		printf("ptr->package = %s\n", ptr->package);
-	if (ptr->section)
-		printf("ptr->section = %s\n", ptr->section);
-	if (ptr->option)
-		printf("ptr->option = %s\n", ptr->option);
-	if (ptr->value)
-		printf("ptr->value = %s\n", ptr->value);
 }
 
 static int uci_path_parse(srpo_uci_path_t *path, const char *uci_path)
 {
 	int error = 0;
 	size_t opt_pos = 0;
-	const char delims[] = ".[]=";
+	const char delims[] = ".[]";
 	char *token = NULL;
 	char *ucipath = xstrdup(uci_path);
 
@@ -1064,11 +1049,13 @@ static int uci_path_parse(srpo_uci_path_t *path, const char *uci_path)
 	} parts = {0, 0};
 
 	token = strtok((char *) ucipath, delims);
+
 	while (token != NULL) {
 		parts.list = xrealloc(parts.list, sizeof(char *) * (++parts.size));
 		parts.list[parts.size - 1] = xstrdup(token);
 		token = strtok(NULL, delims);
 	}
+
 	if (parts.size > 0) {
 		path->package = xstrdup(parts.list[0]);
 	}
@@ -1084,12 +1071,7 @@ static int uci_path_parse(srpo_uci_path_t *path, const char *uci_path)
 		}
 	}
 	if (parts.size > opt_pos) {
-		if (parts.size <= opt_pos + 1) {
-			path->option = xstrdup(parts.list[opt_pos]);
-		} else {
-			path->option = xstrdup(parts.list[opt_pos]);
-			path->value = xstrdup(parts.list[opt_pos + 1]);
-		}
+		path->option = xstrdup(parts.list[opt_pos]);
 	}
 
 	for (size_t i = 0; i < parts.size; i++) {
@@ -1105,7 +1087,6 @@ static void uci_path_free(srpo_uci_path_t *ptr)
 	FREE_SAFE(ptr->package);
 	FREE_SAFE(ptr->section);
 	FREE_SAFE(ptr->option);
-	FREE_SAFE(ptr->value);
 }
 
 static void srpo_path_list_init(srpo_path_list_t *ls)
